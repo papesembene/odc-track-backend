@@ -44,3 +44,10 @@ export const PROMOTIONS_ERRORS = {
     message: 'Promotion introuvable',
   },
 };
+
+export const APPRENANTS_ERRORS = {
+  NOT_FOUND: {
+    code: 'APPRENANT_NOT_FOUND',
+    message: 'Apprenant introuvable',
+  },
+};

@@ -6,6 +6,7 @@ import {
   Delete,
   Body,
   Param,
+  Query,
   UseGuards,
   Request,
   HttpCode,
@@ -19,6 +20,7 @@ import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { ROLE } from '@prisma/client';
 import { ResponseHelper } from '../common/helpers/response.helper';
+import { UsersQueryDto } from './dto/users-query.dto';
 
 /**
  * UsersController gère toutes les routes liées aux utilisateurs.
@@ -37,8 +39,8 @@ export class UsersController {
    */
   @Get()
   @Roles(ROLE.ADMIN)
-  async findAll() {
-    const data = await this.usersService.findAll();
+  async findAll(@Query() query: UsersQueryDto) {
+    const data = await this.usersService.findAll(query);
     return ResponseHelper.success(data);
   }
 

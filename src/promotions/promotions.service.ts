@@ -1,8 +1,14 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { CreatePromotionDto } from './dto/create-promotion.dto';
+import { PromotionsQueryDto } from './dto/promotions-query.dto';
 import { UpdatePromotionDto } from './dto/update-promotion.dto';
 import { PROMOTIONS_ERRORS } from 'src/common/constants/error-messages.constant';
+import {
+  buildPaginationMeta,
+  normalizePagination,
+} from 'src/common/helpers/pagination.helper';
 
 @Injectable()
 export class PromotionsService {
@@ -29,17 +35,48 @@ export class PromotionsService {
     });
   }
 
-  async findAll() {
-    return this.prisma.promotion.findMany({
-      include: {
-        referentiels: {
-          include: {
-            referentiel: true,
+  async findAll(query: PromotionsQueryDto) {
+    const { page, limit, skip } = normalizePagination(query);
+    const sortBy = query.sortBy ?? 'createdAt';
+    const sortOrder = query.sortOrder ?? 'desc';
+
+    const where: Prisma.PromotionWhereInput = {
+      ...(query.search
+        ? { nom: { contains: query.search, mode: 'insensitive' } }
+        : {}),
+      ...(typeof query.annee === 'number' ? { annee: query.annee } : {}),
+      ...(query.referentielId
+        ? {
+            referentiels: {
+              some: {
+                referentielId: query.referentielId,
+              },
+            },
+          }
+        : {}),
+    };
+
+    const [items, totalItems] = await this.prisma.$transaction([
+      this.prisma.promotion.findMany({
+        where,
+        skip,
+        take: limit,
+        include: {
+          referentiels: {
+            include: {
+              referentiel: true,
+            },
           },
         },
-      },
-      orderBy: { createdAt: 'desc' },
-    });
+        orderBy: { [sortBy]: sortOrder },
+      }),
+      this.prisma.promotion.count({ where }),
+    ]);
+
+    return {
+      items,
+      pagination: buildPaginationMeta(page, limit, totalItems),
+    };
   }
 
   async findOne(id: string) {

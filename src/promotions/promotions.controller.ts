@@ -7,6 +7,7 @@ import {
   HttpStatus,
   Param,
   Post,
+  Query,
   Put,
   UseGuards,
 } from '@nestjs/common';
@@ -16,6 +17,7 @@ import { RolesGuard } from 'src/auth/guards/roles.guard';
 import { Roles } from 'src/auth/decorators/roles.decorator';
 import { ResponseHelper } from 'src/common/helpers/response.helper';
 import { CreatePromotionDto } from './dto/create-promotion.dto';
+import { PromotionsQueryDto } from './dto/promotions-query.dto';
 import { UpdatePromotionDto } from './dto/update-promotion.dto';
 import { PromotionsService } from './promotions.service';
 
@@ -33,8 +35,8 @@ export class PromotionsController {
   }
 
   @Get()
-  async findAll() {
-    const data = await this.service.findAll();
+  async findAll(@Query() query: PromotionsQueryDto) {
+    const data = await this.service.findAll(query);
     return ResponseHelper.success(data);
   }
 

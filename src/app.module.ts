@@ -10,6 +10,7 @@ import { AuthModule } from './auth/auth.module';
 import { ReferentielsService } from './referentiels/referentiels.service';
 import { ReferentielsModule } from './referentiels/referentiels.module';
 import { PromotionsModule } from './promotions/promotions.module';
+import { ApprenantsModule } from './apprenants/apprenants.module';
 
 @Module({
   imports: [
@@ -22,6 +23,7 @@ import { PromotionsModule } from './promotions/promotions.module';
     UsersModule,
     ReferentielsModule,
     PromotionsModule,
+    ApprenantsModule,
   ],
   controllers: [AppController],
   providers: [AppService, ReferentielsService],

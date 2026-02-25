@@ -1,0 +1,315 @@
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
+import { Prisma, ROLE } from '@prisma/client';
+import { PrismaService } from 'src/prisma/prisma.service';
+import { ApprenantsQueryDto } from './dto/apprenants-query.dto';
+import { CreateApprenantDto } from './dto/create-apprenant.dto';
+import { UpdateApprenantDto } from './dto/update-apprenant.dto';
+import {
+  APPRENANTS_ERRORS,
+  PROMOTIONS_ERRORS,
+  REFERENTIELS_ERRORS,
+  USER_ERRORS,
+} from 'src/common/constants/error-messages.constant';
+import {
+  buildPaginationMeta,
+  normalizePagination,
+} from 'src/common/helpers/pagination.helper';
+
+@Injectable()
+export class ApprenantsService {
+  constructor(private readonly prisma: PrismaService) {}
+
+  async create(dto: CreateApprenantDto) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: dto.userId },
+    });
+    if (!user) throw new NotFoundException(USER_ERRORS.NOT_FOUND.message);
+    if (user.role !== ROLE.APPRENANT) {
+      throw new BadRequestException('Le user doit avoir le role APPRENANT');
+    }
+
+    const referentiel = await this.prisma.referentiel.findUnique({
+      where: { id: dto.referentielId },
+    });
+    if (!referentiel)
+      throw new NotFoundException(REFERENTIELS_ERRORS.NOT_FOUND.message);
+
+    const promotion = await this.prisma.promotion.findUnique({
+      where: { id: dto.promotionId },
+    });
+    if (!promotion)
+      throw new NotFoundException(PROMOTIONS_ERRORS.NOT_FOUND.message);
+
+    const promotionReferentiel = await this.prisma.promotionReferentiel.findUnique(
+      {
+        where: {
+          promotionId_referentielId: {
+            promotionId: dto.promotionId,
+            referentielId: dto.referentielId,
+          },
+        },
+      },
+    );
+    if (!promotionReferentiel) {
+      throw new BadRequestException(
+        'Le referentiel ne fait pas partie de la promotion',
+      );
+    }
+
+    return this.prisma.apprenant.create({
+      data: {
+        userId: dto.userId,
+        referentielId: dto.referentielId,
+        promotionId: dto.promotionId,
+        telephone: dto.telephone,
+        dateNaissance: dto.dateNaissance
+          ? new Date(dto.dateNaissance)
+          : undefined,
+        genre: dto.genre,
+        adresse: dto.adresse,
+      },
+      include: {
+        user: {
+          select: {
+            id: true,
+            nom: true,
+            prenom: true,
+            email: true,
+            role: true,
+            actif: true,
+          },
+        },
+        referentiel: true,
+        promotion: true,
+      },
+    });
+  }
+
+  async findAll(query: ApprenantsQueryDto) {
+    const { page, limit, skip } = normalizePagination(query);
+    const sortBy = query.sortBy ?? 'createdAt';
+    const sortOrder = query.sortOrder ?? 'desc';
+
+    const where: Prisma.ApprenantWhereInput = {
+      ...(query.referentielId ? { referentielId: query.referentielId } : {}),
+      ...(query.promotionId ? { promotionId: query.promotionId } : {}),
+      ...(query.genre
+        ? { genre: { equals: query.genre, mode: 'insensitive' } }
+        : {}),
+      ...(typeof query.actif === 'boolean'
+        ? {
+            user: {
+              is: {
+                actif: query.actif,
+              },
+            },
+          }
+        : {}),
+      ...(query.search
+        ? {
+            OR: [
+              { user: { is: { nom: { contains: query.search, mode: 'insensitive' } } } },
+              { user: { is: { prenom: { contains: query.search, mode: 'insensitive' } } } },
+              { user: { is: { email: { contains: query.search, mode: 'insensitive' } } } },
+              { adresse: { contains: query.search, mode: 'insensitive' } },
+              { telephone: { contains: query.search, mode: 'insensitive' } },
+            ],
+          }
+        : {}),
+    };
+
+    const [items, totalItems] = await this.prisma.$transaction([
+      this.prisma.apprenant.findMany({
+        where,
+        skip,
+        take: limit,
+        include: {
+          user: {
+            select: {
+              id: true,
+              nom: true,
+              prenom: true,
+              email: true,
+              role: true,
+              actif: true,
+            },
+          },
+          referentiel: true,
+          promotion: true,
+        },
+        orderBy: { [sortBy]: sortOrder },
+      }),
+      this.prisma.apprenant.count({ where }),
+    ]);
+
+    return {
+      items,
+      pagination: buildPaginationMeta(page, limit, totalItems),
+    };
+  }
+
+  async findOne(id: string) {
+    const apprenant = await this.prisma.apprenant.findUnique({
+      where: { id },
+      include: {
+        user: {
+          select: {
+            id: true,
+            nom: true,
+            prenom: true,
+            email: true,
+            role: true,
+            actif: true,
+          },
+        },
+        referentiel: true,
+        promotion: true,
+      },
+    });
+
+    if (!apprenant)
+      throw new NotFoundException(APPRENANTS_ERRORS.NOT_FOUND.message);
+    return apprenant;
+  }
+
+  async update(id: string, dto: UpdateApprenantDto) {
+    const existingApprenant = await this.findOne(id);
+
+    if (dto.promotionId && dto.promotionId !== existingApprenant.promotionId) {
+      throw new BadRequestException(
+        'Changement de promotion non autorise apres creation',
+      );
+    }
+
+    if (dto.userId) {
+      const user = await this.prisma.user.findUnique({
+        where: { id: dto.userId },
+      });
+      if (!user) throw new NotFoundException(USER_ERRORS.NOT_FOUND.message);
+      if (user.role !== ROLE.APPRENANT) {
+        throw new BadRequestException('Le user doit avoir le role APPRENANT');
+      }
+    }
+
+    if (dto.referentielId) {
+      const referentiel = await this.prisma.referentiel.findUnique({
+        where: { id: dto.referentielId },
+      });
+      if (!referentiel)
+        throw new NotFoundException(REFERENTIELS_ERRORS.NOT_FOUND.message);
+
+      const promotionReferentiel = await this.prisma.promotionReferentiel.findUnique(
+        {
+          where: {
+            promotionId_referentielId: {
+              promotionId: existingApprenant.promotionId,
+              referentielId: dto.referentielId,
+            },
+          },
+        },
+      );
+      if (!promotionReferentiel) {
+        throw new BadRequestException(
+          'Le referentiel ne fait pas partie de la promotion de l apprenant',
+        );
+      }
+    }
+
+    return this.prisma.apprenant.update({
+      where: { id },
+      data: {
+        ...dto,
+        dateNaissance: dto.dateNaissance
+          ? new Date(dto.dateNaissance)
+          : undefined,
+      },
+      include: {
+        user: {
+          select: {
+            id: true,
+            nom: true,
+            prenom: true,
+            email: true,
+            role: true,
+            actif: true,
+          },
+        },
+        referentiel: true,
+        promotion: true,
+      },
+    });
+  }
+
+  async remove(id: string) {
+    const apprenant = await this.findOne(id);
+
+    await this.prisma.user.update({
+      where: { id: apprenant.userId },
+      data: { actif: false },
+    });
+
+    return { message: 'Compte apprenant desactive avec succes' };
+  }
+
+  async getMe(userId: string) {
+    const apprenant = await this.prisma.apprenant.findUnique({
+      where: { userId },
+      include: {
+        user: {
+          select: {
+            id: true,
+            nom: true,
+            prenom: true,
+            email: true,
+            role: true,
+            actif: true,
+          },
+        },
+        referentiel: true,
+        promotion: true,
+      },
+    });
+
+    if (!apprenant)
+      throw new NotFoundException(APPRENANTS_ERRORS.NOT_FOUND.message);
+    return apprenant;
+  }
+
+  async updateMe(userId: string, dto: UpdateApprenantDto) {
+    const apprenant = await this.prisma.apprenant.findUnique({
+      where: { userId },
+    });
+    if (!apprenant)
+      throw new NotFoundException(APPRENANTS_ERRORS.NOT_FOUND.message);
+
+    return this.prisma.apprenant.update({
+      where: { id: apprenant.id },
+      data: {
+        telephone: dto.telephone,
+        dateNaissance: dto.dateNaissance
+          ? new Date(dto.dateNaissance)
+          : undefined,
+        genre: dto.genre,
+        adresse: dto.adresse,
+      },
+      include: {
+        user: {
+          select: {
+            id: true,
+            nom: true,
+            prenom: true,
+            email: true,
+            role: true,
+            actif: true,
+          },
+        },
+        referentiel: true,
+        promotion: true,
+      },
+    });
+  }
+}

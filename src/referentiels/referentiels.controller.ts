@@ -7,6 +7,7 @@ import {
   HttpStatus,
   Param,
   Post,
+  Query,
   Put,
   UseGuards,
 } from '@nestjs/common';
@@ -18,6 +19,7 @@ import { RolesGuard } from 'src/auth/guards/roles.guard';
 import { Roles } from 'src/auth/decorators/roles.decorator';
 import { ROLE } from '@prisma/client';
 import { ResponseHelper } from 'src/common/helpers/response.helper';
+import { ReferentielsQueryDto } from './dto/referentiels-query.dto';
 
 @Controller('referentiels')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -33,8 +35,8 @@ export class ReferentielsController {
   }
 
   @Get()
-  async findAll() {
-    const data = await this.service.findAll();
+  async findAll(@Query() query: ReferentielsQueryDto) {
+    const data = await this.service.findAll(query);
     return ResponseHelper.success(data);
   }
 

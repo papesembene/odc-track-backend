@@ -64,8 +64,10 @@ model Apprenant {
   userId                String    @unique
   user                  User      @relation(fields: [userId], references: [id])
 
-  referentielId String      @unique
+  referentielId String      
   referentiel   Referentiel @relation(fields: [referentielId], references: [id])
+  promotionId   String
+  promotion     Promotion   @relation(fields: [promotionId], references: [id])
 
   situations SituationProfessionnelle[]
 
@@ -99,6 +101,7 @@ model Promotion {
   nom          String
   annee        Int
   referentiels PromotionReferentiel[]
+  apprenants   Apprenant[]
   createdAt    DateTime               @default(now())
   updatedAt    DateTime               @updatedAt
 }

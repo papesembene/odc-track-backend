@@ -1,8 +1,14 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { CreateReferentielDto } from './dto/create-referentiel.dto';
 import { UpdateReferentielDto } from './dto/update-referentiel.dto';
 import { REFERENTIELS_ERRORS } from 'src/common/constants/error-messages.constant';
+import { ReferentielsQueryDto } from './dto/referentiels-query.dto';
+import {
+  buildPaginationMeta,
+  normalizePagination,
+} from 'src/common/helpers/pagination.helper';
 
 @Injectable()
 export class ReferentielsService {
@@ -12,8 +18,34 @@ export class ReferentielsService {
     return this.prisma.referentiel.create({ data: dto });
   }
 
-  async findAll() {
-    return this.prisma.referentiel.findMany({ orderBy: { createdAt: 'desc' } });
+  async findAll(query: ReferentielsQueryDto) {
+    const { page, limit, skip } = normalizePagination(query);
+    const sortBy = query.sortBy ?? 'createdAt';
+    const sortOrder = query.sortOrder ?? 'desc';
+
+    const where: Prisma.ReferentielWhereInput = query.search
+      ? {
+          OR: [
+            { nom: { contains: query.search, mode: 'insensitive' } },
+            { description: { contains: query.search, mode: 'insensitive' } },
+          ],
+        }
+      : {};
+
+    const [items, totalItems] = await this.prisma.$transaction([
+      this.prisma.referentiel.findMany({
+        where,
+        skip,
+        take: limit,
+        orderBy: { [sortBy]: sortOrder },
+      }),
+      this.prisma.referentiel.count({ where }),
+    ]);
+
+    return {
+      items,
+      pagination: buildPaginationMeta(page, limit, totalItems),
+    };
   }
 
   async findOne(id: string) {

@@ -3,11 +3,17 @@ import {
   NotFoundException,
   ConflictException,
 } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { USER_ERRORS } from '../common/constants/error-messages.constant';
 import * as bcrypt from 'bcrypt';
+import { UsersQueryDto } from './dto/users-query.dto';
+import {
+  buildPaginationMeta,
+  normalizePagination,
+} from 'src/common/helpers/pagination.helper';
 
 @Injectable()
 export class UsersService {
@@ -17,19 +23,49 @@ export class UsersService {
    * Récupérer la liste de tous les users
    * On exclut le mot de passe de la réponse
    */
-  async findAll() {
-    return this.prisma.user.findMany({
-      select: {
-        id: true,
-        nom: true,
-        prenom: true,
-        email: true,
-        role: true,
-        actif: true,
-        createdAt: true,
-        updatedAt: true,
-      },
-    });
+  async findAll(query: UsersQueryDto) {
+    const { page, limit, skip } = normalizePagination(query);
+    const sortBy = query.sortBy ?? 'createdAt';
+    const sortOrder = query.sortOrder ?? 'desc';
+
+    const where: Prisma.UserWhereInput = {
+      ...(typeof query.actif === 'boolean' ? { actif: query.actif } : {}),
+      ...(query.role ? { role: query.role } : {}),
+      ...(query.search
+        ? {
+            OR: [
+              { nom: { contains: query.search, mode: 'insensitive' } },
+              { prenom: { contains: query.search, mode: 'insensitive' } },
+              { email: { contains: query.search, mode: 'insensitive' } },
+            ],
+          }
+        : {}),
+    };
+
+    const [items, totalItems] = await this.prisma.$transaction([
+      this.prisma.user.findMany({
+        where,
+        skip,
+        take: limit,
+        orderBy: { [sortBy]: sortOrder },
+        select: {
+          id: true,
+          nom: true,
+          prenom: true,
+          email: true,
+          role: true,
+          actif: true,
+          createdAt: true,
+          updatedAt: true,
+        },
+      }),
+      this.prisma.user.count({ where }),
+    ]);
+
+    return {
+      items,
+      pagination: buildPaginationMeta(page, limit, totalItems),
+    };
   }
 
   /**
