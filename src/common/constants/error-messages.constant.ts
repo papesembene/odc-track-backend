@@ -31,3 +31,10 @@ export const USER_ERRORS = {
     message: 'Accès refusé',
   },
 };
+
+export const REFERENTIELS_ERRORS = {
+  NOT_FOUND: {
+    code: 'REFERENTIEL_NOT_FOUND',
+    message: 'Référentiel introuvable',
+  },
+};
