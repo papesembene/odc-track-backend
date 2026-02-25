@@ -38,3 +38,9 @@ export const REFERENTIELS_ERRORS = {
     message: 'Référentiel introuvable',
   },
 };
+export const PROMOTIONS_ERRORS = {
+  NOT_FOUND: {
+    code: 'PROMOTION_NOT_FOUND',
+    message: 'Promotion introuvable',
+  },
+};

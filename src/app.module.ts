@@ -9,6 +9,7 @@ import { UsersModule } from './users/users.module';
 import { AuthModule } from './auth/auth.module';
 import { ReferentielsService } from './referentiels/referentiels.service';
 import { ReferentielsModule } from './referentiels/referentiels.module';
+import { PromotionsModule } from './promotions/promotions.module';
 
 @Module({
   imports: [
@@ -20,6 +21,7 @@ import { ReferentielsModule } from './referentiels/referentiels.module';
     AuthModule,
     UsersModule,
     ReferentielsModule,
+    PromotionsModule,
   ],
   controllers: [AppController],
   providers: [AppService, ReferentielsService],
