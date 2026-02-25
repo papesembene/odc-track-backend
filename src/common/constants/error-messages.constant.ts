@@ -16,3 +16,18 @@ export const AUTH_ERROR = {
     message: 'Compte désactivé',
   },
 };
+
+export const USER_ERRORS = {
+  NOT_FOUND: {
+    code: 'USER_NOT_FOUND',
+    message: 'Utilisateur introuvable',
+  },
+  EMAIL_EXISTS: {
+    code: 'USER_EMAIL_EXISTS',
+    message: 'Cet email existe déjà',
+  },
+  FORBIDDEN: {
+    code: 'USER_FORBIDDEN',
+    message: 'Accès refusé',
+  },
+};
