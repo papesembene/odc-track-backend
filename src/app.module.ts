@@ -13,6 +13,7 @@ import { PromotionsModule } from './promotions/promotions.module';
 import { ApprenantsModule } from './apprenants/apprenants.module';
 import { EntreprisesModule } from './entreprises/entreprises.module';
 import { SituationsModule } from './situations/situations.module';
+import { DocumentsModule } from './documents/documents.module';
 
 @Module({
   imports: [
@@ -28,6 +29,7 @@ import { SituationsModule } from './situations/situations.module';
     ApprenantsModule,
     EntreprisesModule,
     SituationsModule,
+    DocumentsModule,
   ],
   controllers: [AppController],
   providers: [AppService, ReferentielsService],

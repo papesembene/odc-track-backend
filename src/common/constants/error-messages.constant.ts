@@ -57,3 +57,26 @@ export const ENTREPRISES_ERRORS = {
     message: 'Entreprise introuvable',
   },
 };
+
+export const DOCUMENTS_ERRORS = {
+  NOT_FOUND: {
+    code: 'DOCUMENT_NOT_FOUND',
+    message: 'Document introuvable',
+  },
+  FORBIDDEN: {
+    code: 'DOCUMENT_FORBIDDEN',
+    message: 'Acces refuse a ce document',
+  },
+  FILE_REQUIRED: {
+    code: 'DOCUMENT_FILE_REQUIRED',
+    message: 'Fichier manquant',
+  },
+  INVALID_FILE_TYPE: {
+    code: 'DOCUMENT_INVALID_FILE_TYPE',
+    message: 'Format de fichier non supporte',
+  },
+  FILE_TOO_LARGE: {
+    code: 'DOCUMENT_FILE_TOO_LARGE',
+    message: 'Fichier trop volumineux (max 10 Mo)',
+  },
+};
