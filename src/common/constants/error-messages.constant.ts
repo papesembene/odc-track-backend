@@ -51,3 +51,9 @@ export const APPRENANTS_ERRORS = {
     message: 'Apprenant introuvable',
   },
 };
+export const ENTREPRISES_ERRORS = {
+  NOT_FOUND: {
+    code: 'ENTRPRISE_NOT_FOUND',
+    message: 'Entreprise introuvable',
+  },
+};

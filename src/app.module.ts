@@ -11,6 +11,7 @@ import { ReferentielsService } from './referentiels/referentiels.service';
 import { ReferentielsModule } from './referentiels/referentiels.module';
 import { PromotionsModule } from './promotions/promotions.module';
 import { ApprenantsModule } from './apprenants/apprenants.module';
+import { EntreprisesModule } from './entreprises/entreprises.module';
 
 @Module({
   imports: [
@@ -24,6 +25,7 @@ import { ApprenantsModule } from './apprenants/apprenants.module';
     ReferentielsModule,
     PromotionsModule,
     ApprenantsModule,
+    EntreprisesModule,
   ],
   controllers: [AppController],
   providers: [AppService, ReferentielsService],
