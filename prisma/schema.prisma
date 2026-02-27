@@ -1,17 +1,122 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
-
 generator client {
   provider = "prisma-client-js"
-  // output   = "../generated/prisma"
 }
 
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model User {
+  id         String     @id @default(uuid())
+  nom        String
+  prenom     String
+  email      String     @unique
+  motDePasse String
+  role       ROLE
+  actif      Boolean    @default(true)
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
+  apprenant  Apprenant?
+  coach      Coach?
+}
+
+model Apprenant {
+  id                    String                     @id @default(uuid())
+  telephone             String?
+  dateNaissance         DateTime?
+  genre                 String
+  adresse               String
+  motDePasseTemporaire  Boolean                    @default(true)
+  datePremiereConnexion DateTime?
+  userId                String                     @unique
+  referentielId         String
+  promotionId           String
+  createdAt             DateTime                   @default(now())
+  updatedAt             DateTime                   @updatedAt
+  promotion             Promotion                  @relation(fields: [promotionId], references: [id])
+  referentiel           Referentiel                @relation(fields: [referentielId], references: [id])
+  user                  User                       @relation(fields: [userId], references: [id])
+  documents             Document[]
+  situations            SituationProfessionnelle[]
+}
+
+model Coach {
+  id          String   @id @default(uuid())
+  specialite  String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  userId      String   @unique
+  utilisateur User     @relation(fields: [userId], references: [id])
+}
+
+model Referentiel {
+  id          String                 @id @default(uuid())
+  nom         String
+  description String?
+  createdAt   DateTime               @default(now())
+  updatedAt   DateTime               @updatedAt
+  apprenants  Apprenant[]
+  promotions  PromotionReferentiel[]
+}
+
+model Promotion {
+  id           String                 @id @default(uuid())
+  nom          String
+  annee        Int
+  createdAt    DateTime               @default(now())
+  updatedAt    DateTime               @updatedAt
+  apprenants   Apprenant[]
+  referentiels PromotionReferentiel[]
+}
+
+model PromotionReferentiel {
+  promotionId   String
+  referentielId String
+  promotion     Promotion   @relation(fields: [promotionId], references: [id])
+  referentiel   Referentiel @relation(fields: [referentielId], references: [id])
+
+  @@id([promotionId, referentielId])
+}
+
+model SituationProfessionnelle {
+  id             String      @id @default(uuid())
+  statut         STATUT
+  dateDebut      DateTime
+  dateFin        DateTime?
+  commentaire    String?
+  valide         Boolean     @default(false)
+  dateValidation DateTime?
+  apprenantId    String
+  entrepriseId   String?
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+  apprenant      Apprenant   @relation(fields: [apprenantId], references: [id])
+  entreprise     Entreprise? @relation(fields: [entrepriseId], references: [id])
+}
+
+model Entreprise {
+  id         String                     @id @default(uuid())
+  nom        String
+  secteur    String?
+  adresse    String?
+  telephone  String?
+  email      String?
+  createdAt  DateTime                   @default(now())
+  updatedAt  DateTime                   @updatedAt
+  situations SituationProfessionnelle[]
+}
+
+model Document {
+  id          String    @id @default(uuid())
+  type        DOCTYPE
+  fichier     String
+  dateUpload  DateTime  @default(now())
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  apprenantId String
+  apprenant   Apprenant @relation(fields: [apprenantId], references: [id])
 }
 
 enum ROLE {
@@ -36,122 +141,4 @@ enum DOCTYPE {
   LETTRE_MISSION
   CV
   AUTRE
-}
-
-model User {
-  id         String   @id @default(uuid())
-  nom        String
-  prenom     String
-  email      String   @unique
-  motDePasse String
-  role       ROLE
-  actif      Boolean  @default(true)
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
-
-  apprenant Apprenant?
-  coach     Coach?
-}
-
-model Apprenant {
-  id                    String    @id @default(uuid())
-  telephone             String?
-  dateNaissance         DateTime?
-  genre                 String
-  adresse               String
-  motDePasseTemporaire  Boolean   @default(true)
-  datePremiereConnexion DateTime?
-  userId                String    @unique
-  user                  User      @relation(fields: [userId], references: [id])
-
-  referentielId String      
-  referentiel   Referentiel @relation(fields: [referentielId], references: [id])
-  promotionId   String
-  promotion     Promotion   @relation(fields: [promotionId], references: [id])
-
-  situations SituationProfessionnelle[]
-
-  documents Document[]
-  createdAt DateTime   @default(now())
-  updatedAt DateTime   @updatedAt
-}
-
-model Coach {
-  id         String   @id @default(uuid())
-  specialite String?
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
-
-  userId      String @unique
-  utilisateur User   @relation(fields: [userId], references: [id])
-}
-
-model Referentiel {
-  id          String                 @id @default(uuid())
-  nom         String
-  description String?
-  promotions  PromotionReferentiel[]
-  apprenants  Apprenant[]
-  createdAt   DateTime               @default(now())
-  updatedAt   DateTime               @updatedAt
-}
-
-model Promotion {
-  id           String                 @id @default(uuid())
-  nom          String
-  annee        Int
-  referentiels PromotionReferentiel[]
-  apprenants   Apprenant[]
-  createdAt    DateTime               @default(now())
-  updatedAt    DateTime               @updatedAt
-}
-
-model PromotionReferentiel {
-  promotionId   String
-  referentielId String
-
-  promotion   Promotion   @relation(fields: [promotionId], references: [id])
-  referentiel Referentiel @relation(fields: [referentielId], references: [id])
-
-  @@id([promotionId, referentielId])
-}
-
-model SituationProfessionnelle {
-  id             String      @id @default(uuid())
-  statut         STATUT
-  dateDebut      DateTime
-  dateFin        DateTime?
-  commentaire    String?
-  valide         Boolean     @default(false)
-  dateValidation DateTime?
-  apprenantId    String
-  apprenant      Apprenant   @relation(fields: [apprenantId], references: [id])
-  entrepriseId   String?
-  entreprise     Entreprise? @relation(fields: [entrepriseId], references: [id])
-  createdAt      DateTime    @default(now())
-  updatedAt      DateTime    @updatedAt
-}
-
-model Entreprise {
-  id         String                     @id @default(uuid())
-  nom        String
-  secteur    String?
-  adresse    String?
-  telephone  String?
-  email      String?
-  situations SituationProfessionnelle[]
-  createdAt  DateTime                   @default(now())
-  updatedAt  DateTime                   @updatedAt
-}
-
-model Document {
-  id         String   @id @default(uuid())
-  type       DOCTYPE
-  fichier    String
-  dateUpload DateTime @default(now())
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
-
-  apprenantId String
-  apprenant   Apprenant @relation(fields: [apprenantId], references: [id])
 }
