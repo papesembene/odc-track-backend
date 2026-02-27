@@ -1,4 +1,5 @@
 import { Controller, Get, Param, Query, UseGuards } from '@nestjs/common';
+import { ApiBearerAuth } from '@nestjs/swagger';
 import { ROLE } from '@prisma/client';
 import { Roles } from 'src/auth/decorators/roles.decorator';
 import { JwtAuthGuard } from 'src/auth/guards/jwt-auth.guard';
@@ -8,6 +9,7 @@ import { StatistiquesPeriodeQueryDto } from './dto/statistiques-periode-query.dt
 import { StatistiquesService } from './statistiques.service';
 
 @Controller('statistiques')
+@ApiBearerAuth()
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class StatistiquesController {
   constructor(private readonly service: StatistiquesService) {}

@@ -1,7 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ApprenantsController } from './apprenants.controller';
 import { ApprenantsService } from './apprenants.service';
-import { PrismaService } from 'src/prisma/prisma.service';
 import { CsvParserService } from './import/csv-parser.service';
 import { DateParserService } from './import/date-parser.service';
 import { ApprenantRowValidatorService } from './import/apprenant-row-validator.service';
@@ -18,7 +17,6 @@ import { ReferentielApprenantsImportController } from './referentiel-apprenants-
   ],
   providers: [
     ApprenantsService,
-    PrismaService,
     CsvParserService,
     DateParserService,
     ExcelParserService,

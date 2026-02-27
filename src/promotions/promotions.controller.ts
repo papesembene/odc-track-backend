@@ -11,6 +11,7 @@ import {
   Put,
   UseGuards,
 } from '@nestjs/common';
+import { ApiBearerAuth } from '@nestjs/swagger';
 import { ROLE } from '@prisma/client';
 import { JwtAuthGuard } from 'src/auth/guards/jwt-auth.guard';
 import { RolesGuard } from 'src/auth/guards/roles.guard';
@@ -22,6 +23,7 @@ import { UpdatePromotionDto } from './dto/update-promotion.dto';
 import { PromotionsService } from './promotions.service';
 
 @Controller('promotions')
+@ApiBearerAuth()
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class PromotionsController {
   constructor(private readonly service: PromotionsService) {}

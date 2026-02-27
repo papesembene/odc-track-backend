@@ -11,6 +11,7 @@ import {
   Req,
   UseGuards,
 } from '@nestjs/common';
+import { ApiBearerAuth } from '@nestjs/swagger';
 import type { Request } from 'express';
 import { ROLE } from '@prisma/client';
 import { JwtAuthGuard } from 'src/auth/guards/jwt-auth.guard';
@@ -23,6 +24,7 @@ import { UpdateSituationDto } from './dto/update-situation.dto';
 import { ValidateSituationDto } from './dto/validate-situation.dto';
 
 @Controller()
+@ApiBearerAuth()
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class SituationsController {
   constructor(private readonly service: SituationsService) {}

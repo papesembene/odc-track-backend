@@ -13,6 +13,7 @@ import {
   UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
+import { ApiBearerAuth } from '@nestjs/swagger';
 import type { Request } from 'express';
 import { ROLE } from '@prisma/client';
 import { FileInterceptor } from '@nestjs/platform-express';
@@ -25,6 +26,7 @@ import { DocumentsQueryDto } from './dto/documents-query.dto';
 import { CreateDocumentDto } from './dto/create-document.dto';
 
 @Controller()
+@ApiBearerAuth()
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class DocumentsController {
   constructor(private readonly service: DocumentsService) {}

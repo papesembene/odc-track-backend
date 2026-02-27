@@ -11,6 +11,7 @@ import {
   Query,
   UseGuards,
 } from '@nestjs/common';
+import { ApiBearerAuth } from '@nestjs/swagger';
 import { ROLE } from '@prisma/client';
 import { JwtAuthGuard } from 'src/auth/guards/jwt-auth.guard';
 import { RolesGuard } from 'src/auth/guards/roles.guard';
@@ -22,6 +23,7 @@ import { UpdateEntrepriseDto } from './dto/update-entreprise.dto';
 import { EntreprisesQueryDto } from './dto/entreprises-query.dto';
 
 @Controller('entreprises')
+@ApiBearerAuth()
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class EntreprisesController {
   constructor(private readonly service: EntreprisesService) {}

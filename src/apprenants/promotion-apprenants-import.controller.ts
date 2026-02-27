@@ -9,6 +9,7 @@ import {
   UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
+import { ApiBearerAuth } from '@nestjs/swagger';
 import { ROLE } from '@prisma/client';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { Roles } from 'src/auth/decorators/roles.decorator';
@@ -19,6 +20,7 @@ import { ApprenantsImportService } from './import/apprenants-import.service';
 import { ExcelParserService } from './import/excel-parser.service';
 
 @Controller('promotions/:promotionId/apprenants')
+@ApiBearerAuth()
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class PromotionApprenantsImportController {
   constructor(

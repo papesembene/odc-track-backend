@@ -12,6 +12,7 @@ import {
   Req,
   UseGuards,
 } from '@nestjs/common';
+import { ApiBearerAuth } from '@nestjs/swagger';
 import type { Request } from 'express';
 import { ROLE } from '@prisma/client';
 import { Roles } from 'src/auth/decorators/roles.decorator';
@@ -24,6 +25,7 @@ import { CreateApprenantDto } from './dto/create-apprenant.dto';
 import { UpdateApprenantDto } from './dto/update-apprenant.dto';
 
 @Controller('apprenants')
+@ApiBearerAuth()
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class ApprenantsController {
   constructor(private readonly service: ApprenantsService) {}
@@ -37,7 +39,7 @@ export class ApprenantsController {
   }
 
   @Get()
-  @Roles(ROLE.ADMIN, ROLE.COACH)
+  @Roles(ROLE.POLE_EMPLOI, ROLE.MANAGER)
   async findAll(@Query() query: ApprenantsQueryDto) {
     const data = await this.service.findAll(query);
     return ResponseHelper.success(data);
@@ -61,14 +63,14 @@ export class ApprenantsController {
   }
 
   @Get(':id')
-  @Roles(ROLE.ADMIN, ROLE.COACH)
+  @Roles(ROLE.POLE_EMPLOI, ROLE.MANAGER)
   async findOne(@Param('id') id: string) {
     const data = await this.service.findOne(id);
     return ResponseHelper.success(data);
   }
 
   @Put(':id')
-  @Roles(ROLE.ADMIN, ROLE.COACH)
+  @Roles(ROLE.COACH)
   async update(@Param('id') id: string, @Body() dto: UpdateApprenantDto) {
     const data = await this.service.update(id, dto);
     return ResponseHelper.success(data, 'Apprenant modifie avec succes');

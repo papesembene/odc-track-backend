@@ -7,6 +7,7 @@ import {
   Req,
   UseGuards,
 } from '@nestjs/common';
+import { ApiBearerAuth } from '@nestjs/swagger';
 import type { Request } from 'express';
 import { ROLE } from '@prisma/client';
 import { AuthService } from './auth.service';
@@ -46,6 +47,7 @@ export class AuthController {
   @Post('refresh-token')
   @HttpCode(HttpStatus.OK)
   @UseGuards(JwtRefreshGuard)
+  @ApiBearerAuth()
   async refreshToken(
     @Req() req: Request & { user: { id: string; email: string; role: ROLE } },
   ) {
@@ -60,6 +62,7 @@ export class AuthController {
   @Post('logout')
   @UseGuards(JwtAuthGuard)
   @HttpCode(HttpStatus.OK)
+  @ApiBearerAuth()
   async logout(@Req() req: Request & { user: { id: string } }) {
     const data = await this.authService.logout(req.user.id);
     return ResponseHelper.success(data, 'Déconnexion réussie');
@@ -68,6 +71,7 @@ export class AuthController {
   @Post('change-password')
   @HttpCode(HttpStatus.OK)
   @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
   async changePassword(
     @Req() req: Request & { user: { id: string } },
     @Body() ChangePasswordDto: ChangePasswordDto,

@@ -11,6 +11,7 @@ import {
   Put,
   UseGuards,
 } from '@nestjs/common';
+import { ApiBearerAuth } from '@nestjs/swagger';
 import { ReferentielsService } from './referentiels.service';
 import { CreateReferentielDto } from './dto/create-referentiel.dto';
 import { UpdateReferentielDto } from './dto/update-referentiel.dto';
@@ -22,6 +23,7 @@ import { ResponseHelper } from 'src/common/helpers/response.helper';
 import { ReferentielsQueryDto } from './dto/referentiels-query.dto';
 
 @Controller('referentiels')
+@ApiBearerAuth()
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class ReferentielsController {
   constructor(private readonly service: ReferentielsService) {}
