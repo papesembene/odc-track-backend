@@ -14,6 +14,7 @@ import { ApprenantsModule } from './apprenants/apprenants.module';
 import { EntreprisesModule } from './entreprises/entreprises.module';
 import { SituationsModule } from './situations/situations.module';
 import { DocumentsModule } from './documents/documents.module';
+import { StatistiquesModule } from './statistiques/statistiques.module';
 
 @Module({
   imports: [
@@ -30,6 +31,7 @@ import { DocumentsModule } from './documents/documents.module';
     EntreprisesModule,
     SituationsModule,
     DocumentsModule,
+    StatistiquesModule,
   ],
   controllers: [AppController],
   providers: [AppService, ReferentielsService],
