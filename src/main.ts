@@ -1,9 +1,12 @@
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { ValidationPipe } from '@nestjs/common';
-import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import { NestExpressApplication } from '@nestjs/platform-express';
+import { join } from 'path';
+import { SwaggerModule } from '@nestjs/swagger';
+
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule);
 
   // Prefix global
   app.setGlobalPrefix('api/v1');
@@ -23,15 +26,15 @@ async function bootstrap() {
   // CORS
   app.enableCors();
 
-  const swaggerConfig = new DocumentBuilder()
-    .setTitle('ODC Track Backend API')
-    .setDescription('Documentation des endpoints API ODC Track')
-    .setVersion('1.0.0')
-    .addBearerAuth()
-    .build();
+  // Expose la spec YAML en statique pour Swagger UI
+  app.useStaticAssets(join(process.cwd(), 'docs'), { prefix: '/docs-assets/' });
 
-  const swaggerDocument = SwaggerModule.createDocument(app, swaggerConfig);
-  SwaggerModule.setup('docs', app, swaggerDocument);
+  // Swagger spec-first: Swagger UI lit docs/openapi.yaml via URL
+  SwaggerModule.setup('docs', app, {} as never, {
+    swaggerOptions: {
+      url: '/docs-assets/openapi.yaml',
+    },
+  });
 
   await app.listen(process.env.PORT ?? 3000);
 }
