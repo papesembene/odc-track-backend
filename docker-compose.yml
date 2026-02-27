@@ -1,30 +1,36 @@
-version: '3.8'
+version: "3.9"
 
 services:
-  postgres:
-    image: postgres:15
-    container_name: odc_track_db
+  db:
+    image: postgres:15-alpine
+    container_name: odc_postgres
+    restart: unless-stopped
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: odc_track
     ports:
-      - "5432:5432"
+      - "5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
 
-  backend:
+  api:
     build: .
-    container_name: odc_track_backend
-    ports:
-      - "3000:3000"
+    container_name: odc_api
+    restart: unless-stopped
+    depends_on:
+      - db
     env_file:
       - .env
-    depends_on:
-      - postgres
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@db:5432/odc_track?schema=public
+      NODE_ENV: production
+      PORT: 3000
+    ports:
+      - "3002:3000"
     volumes:
-      - .:/app
-      - /app/node_modules
+      - uploads_data:/app/uploads
 
 volumes:
   postgres_data:
+  uploads_data:
