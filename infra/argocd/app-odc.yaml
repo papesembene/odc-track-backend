@@ -7,7 +7,7 @@ spec:
   project: default
   source:
     repoURL: https://github.com/papesembene/odc-track-backend
-    targetRevision: feature/gitops-argocd
+    targetRevision: develop
     path: infra/k8s
   destination:
     server: https://kubernetes.default.svc
