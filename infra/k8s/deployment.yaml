@@ -17,7 +17,7 @@ spec:
     spec:
       containers:
         - name: odc-api
-          image: ghcr.io/REPLACE_ME/odc_back:latest
+          image: papesembene/odc-track-backend:gitops-v1
           imagePullPolicy: Always
           ports:
             - containerPort: 3001
