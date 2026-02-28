@@ -1,15 +1,10 @@
-import { Test, TestingModule } from '@nestjs/testing';
 import { ReferentielsController } from './referentiels.controller';
 
 describe('ReferentielsController', () => {
   let controller: ReferentielsController;
 
-  beforeEach(async () => {
-    const module: TestingModule = await Test.createTestingModule({
-      controllers: [ReferentielsController],
-    }).compile();
-
-    controller = module.get<ReferentielsController>(ReferentielsController);
+  beforeEach(() => {
+    controller = new ReferentielsController({} as any);
   });
 
   it('should be defined', () => {
