@@ -30,6 +30,16 @@ export class SituationsController {
   constructor(private readonly service: SituationsService) {}
 
   /**
+   * Historique des situations de l'apprenant connecté.
+   */
+  @Get('/apprenants/me/situations')
+  @Roles(ROLE.APPRENANT)
+  async findMySituations(@Req() req: Request & { user: { id: string } }) {
+    const data = await this.service.findMySituations(req.user.id);
+    return ResponseHelper.success(data);
+  }
+
+  /**
    * Liste des situations d'un apprenant (POLE_EMPLOI, MANAGER, COACH).
    */
   @Get('/apprenants/:apprenantId/situations')

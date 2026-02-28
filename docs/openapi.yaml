@@ -637,6 +637,14 @@ paths:
           description: OK
 
   /apprenants/me/situations:
+    get:
+      tags: [Situations]
+      summary: Lister mes situations (apprenant)
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: OK
     post:
       tags: [Situations]
       summary: Déclarer ma situation

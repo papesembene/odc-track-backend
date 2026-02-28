@@ -45,6 +45,29 @@ export class SituationsService {
   }
 
   /**
+   * Retourne l'historique des situations de l'apprenant connecté.
+   */
+  async findMySituations(userId: string) {
+    const apprenant = await this.prisma.apprenant.findUnique({
+      where: { userId },
+      select: { id: true },
+    });
+
+    if (!apprenant) {
+      throw new NotFoundException(APPRENANTS_ERRORS.NOT_FOUND.message);
+    }
+
+    return this.prisma.situationProfessionnelle.findMany({
+      where: { apprenantId: apprenant.id },
+      include: {
+        entreprise: true,
+        documents: true,
+      },
+      orderBy: { dateDebut: 'desc' },
+    });
+  }
+
+  /**
    * Retourne une situation avec contrôle d'accès:
    * - rôles staff: accès direct
    * - apprenant: uniquement sa propre situation
