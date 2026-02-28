@@ -81,6 +81,24 @@ export class DocumentsController {
   }
 
   /**
+   * Liste les documents d'une situation.
+   * Staff autorisé; un apprenant ne voit que ses propres situations.
+   */
+  @Get('/situations/:id/documents')
+  @Roles(ROLE.POLE_EMPLOI, ROLE.MANAGER, ROLE.COACH, ROLE.APPRENANT)
+  async findBySituation(
+    @Param('id') id: string,
+    @Req() req: Request & { user: { id: string; role: ROLE } },
+  ) {
+    const data = await this.service.findBySituation(
+      id,
+      req.user.id,
+      req.user.role,
+    );
+    return ResponseHelper.success(data);
+  }
+
+  /**
    * Suppression d'un document par son propriétaire apprenant.
    */
   @Delete('/documents/:id')

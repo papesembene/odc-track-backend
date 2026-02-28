@@ -80,10 +80,8 @@ export class DocumentsService {
   }
 
   /**
-   * Crée un document pour l'apprenant connecté:
-   * - récupère l'apprenant via userId
-   * - stocke le fichier en local
-   * - persiste les métadonnées en base
+   * Crée un document pour l'apprenant connecté et le rattache à une situation.
+   * Règle métier: l'apprenant ne peut uploader que sur ses propres situations.
    */
   async uploadForMe(
     requesterUserId: string,
@@ -93,15 +91,73 @@ export class DocumentsService {
     const apprenant = await this.getApprenantByUserId(requesterUserId);
     this.validateFile(file);
 
+    const situation = await this.prisma.situationProfessionnelle.findUnique({
+      where: { id: dto.situationId },
+      select: { id: true, apprenantId: true },
+    });
+
+    if (!situation) {
+      throw new NotFoundException('Situation introuvable');
+    }
+
+    if (situation.apprenantId !== apprenant.id) {
+      throw new ForbiddenException(
+        'Vous ne pouvez pas ajouter un document sur cette situation',
+      );
+    }
+
     const storedPath = await this.storage.save(file);
 
     return this.prisma.document.create({
       data: {
         apprenantId: apprenant.id,
+        situationId: situation.id,
         type: dto.type,
         fichier: storedPath,
       },
     });
+  }
+
+  /**
+   * Liste les documents d'une situation.
+   * Accès: staff autorisé; apprenant autorisé uniquement sur ses propres situations.
+   */
+  async findBySituation(
+    situationId: string,
+    requesterUserId: string,
+    requesterRole: ROLE,
+  ) {
+    const situation = await this.prisma.situationProfessionnelle.findUnique({
+      where: { id: situationId },
+      select: { id: true, apprenantId: true },
+    });
+
+    if (!situation) {
+      throw new NotFoundException('Situation introuvable');
+    }
+
+    const staffRoles: ROLE[] = [ROLE.POLE_EMPLOI, ROLE.MANAGER, ROLE.COACH];
+
+    if (staffRoles.includes(requesterRole)) {
+      return this.prisma.document.findMany({
+        where: { situationId },
+        orderBy: { createdAt: 'desc' },
+      });
+    }
+
+    if (requesterRole === ROLE.APPRENANT) {
+      const apprenant = await this.getApprenantByUserId(requesterUserId);
+      if (apprenant.id !== situation.apprenantId) {
+        throw new ForbiddenException(DOCUMENTS_ERRORS.FORBIDDEN.message);
+      }
+
+      return this.prisma.document.findMany({
+        where: { situationId },
+        orderBy: { createdAt: 'desc' },
+      });
+    }
+
+    throw new ForbiddenException(DOCUMENTS_ERRORS.FORBIDDEN.message);
   }
 
   /**

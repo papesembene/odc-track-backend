@@ -779,18 +779,39 @@ paths:
           multipart/form-data:
             schema:
               type: object
-              required: [type, file]
+              required: [type, situationId, file]
               properties:
                 type:
                   type: string
                   enum: [CONTRAT, ATTESTATION, LETTRE_MISSION, CV, AUTRE]
                   example: CV
+                situationId:
+                  type: string
+                  format: uuid
+                  example: 33333333-3333-3333-3333-333333333333
                 file:
                   type: string
                   format: binary
       responses:
         '201':
           description: Créé
+
+  /situations/{id}/documents:
+    get:
+      tags: [Documents]
+      summary: Lister les documents d'une situation
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: OK
 
   /apprenants/{apprenantId}/documents:
     get:

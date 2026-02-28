@@ -98,6 +98,9 @@ model SituationProfessionnelle {
    nomEntrepriseLibre     String?
   secteurEntrepriseLibre String?
   adresseEntrepriseLibre String?
+
+  documents Document[]
+
 }
 
 model Entreprise {
@@ -121,6 +124,10 @@ model Document {
   updatedAt   DateTime  @updatedAt
   apprenantId String
   apprenant   Apprenant @relation(fields: [apprenantId], references: [id])
+
+  situationId String?
+  situation   SituationProfessionnelle? @relation(fields: [situationId], references: [id])
+
 }
 
 enum ROLE {
