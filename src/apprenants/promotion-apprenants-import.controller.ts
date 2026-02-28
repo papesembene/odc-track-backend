@@ -29,7 +29,7 @@ export class PromotionApprenantsImportController {
   ) {}
 
   @Post('import')
-  @Roles(ROLE.ADMIN)
+  @Roles(ROLE.ADMIN, ROLE.POLE_EMPLOI)
   @HttpCode(HttpStatus.OK)
   @UseInterceptors(FileInterceptor('file'))
   async import(

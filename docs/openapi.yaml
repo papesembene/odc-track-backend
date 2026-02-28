@@ -16,6 +16,7 @@ tags:
   - name: Referentiels
   - name: Promotions
   - name: Apprenants
+  - name: Entreprises
   - name: Situations
   - name: Documents
   - name: Statistiques
@@ -134,6 +135,56 @@ components:
           format: uuid
           nullable: true
           example: 22222222-2222-2222-2222-222222222222
+        nomEntrepriseLibre:
+          type: string
+          nullable: true
+          example: Startup XYZ
+        secteurEntrepriseLibre:
+          type: string
+          nullable: true
+          example: Fintech
+        adresseEntrepriseLibre:
+          type: string
+          nullable: true
+          example: Dakar
+
+    UpdateSituationRequest:
+      type: object
+      properties:
+        statut:
+          type: string
+          enum: [RECHERCHE_EMPLOI, EN_STAGE, EN_EMPLOI, PROJET_PERSO, POURSUITE_ETUDES]
+          example: EN_EMPLOI
+        dateDebut:
+          type: string
+          format: date
+          example: 2026-01-10
+        dateFin:
+          type: string
+          format: date
+          nullable: true
+          example: 2026-04-30
+        commentaire:
+          type: string
+          nullable: true
+          example: Mise à jour situation
+        entrepriseId:
+          type: string
+          format: uuid
+          nullable: true
+          example: 22222222-2222-2222-2222-222222222222
+        nomEntrepriseLibre:
+          type: string
+          nullable: true
+          example: Startup XYZ
+        secteurEntrepriseLibre:
+          type: string
+          nullable: true
+          example: Fintech
+        adresseEntrepriseLibre:
+          type: string
+          nullable: true
+          example: Dakar
 
     ValidateSituationRequest:
       type: object
@@ -237,6 +288,42 @@ paths:
       responses:
         '200':
           description: OK
+    put:
+      tags: [Users]
+      summary: Modifier un utilisateur
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: OK
+    delete:
+      tags: [Users]
+      summary: Désactiver un utilisateur
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: OK
 
   /referentiels:
     get:
@@ -262,6 +349,59 @@ paths:
         '201':
           description: Créé
 
+  /referentiels/{id}:
+    get:
+      tags: [Referentiels]
+      summary: Détail référentiel
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: OK
+    put:
+      tags: [Referentiels]
+      summary: Modifier un référentiel
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: OK
+    delete:
+      tags: [Referentiels]
+      summary: Supprimer un référentiel
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: OK
+
   /promotions:
     get:
       tags: [Promotions]
@@ -286,12 +426,103 @@ paths:
         '201':
           description: Créé
 
+  /promotions/{id}:
+    get:
+      tags: [Promotions]
+      summary: Détail promotion
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: OK
+    put:
+      tags: [Promotions]
+      summary: Modifier une promotion
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: OK
+    delete:
+      tags: [Promotions]
+      summary: Supprimer une promotion
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: OK
+
   /apprenants:
     get:
       tags: [Apprenants]
       summary: Lister les apprenants
       security:
         - bearerAuth: []
+      responses:
+        '200':
+          description: OK
+    post:
+      tags: [Apprenants]
+      summary: Créer un apprenant
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '201':
+          description: Créé
+
+  /apprenants/me:
+    get:
+      tags: [Apprenants]
+      summary: Mon profil apprenant
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: OK
+    put:
+      tags: [Apprenants]
+      summary: Modifier mon profil apprenant
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
       responses:
         '200':
           description: OK
@@ -312,11 +543,106 @@ paths:
       responses:
         '200':
           description: OK
+    put:
+      tags: [Apprenants]
+      summary: Modifier un apprenant
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: OK
+    delete:
+      tags: [Apprenants]
+      summary: Désactiver un apprenant
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: OK
+
+  /promotions/{promotionId}/apprenants/import:
+    post:
+      tags: [Apprenants]
+      summary: Importer des apprenants par promotion
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: promotionId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        '200':
+          description: OK
+
+  /referentiels/{referentielId}/apprenants/import:
+    post:
+      tags: [Apprenants]
+      summary: Importer des apprenants par référentiel
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: referentielId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        '200':
+          description: OK
 
   /apprenants/me/situations:
     post:
       tags: [Situations]
       summary: Déclarer ma situation
+      description: |
+        Cas 1 (interne): fournir `entrepriseId`.
+        Cas 2 (entreprise externe/non partenaire): fournir `nomEntrepriseLibre`.
       security:
         - bearerAuth: []
       requestBody:
@@ -325,9 +651,98 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/CreateSituationRequest'
+            examples:
+              entrepriseInterne:
+                summary: Situation avec entreprise interne
+                value:
+                  statut: EN_STAGE
+                  dateDebut: '2026-03-01'
+                  dateFin: '2026-06-01'
+                  commentaire: Stage interne
+                  entrepriseId: 22222222-2222-2222-2222-222222222222
+              entrepriseLibre:
+                summary: Situation avec entreprise non partenaire
+                value:
+                  statut: EN_EMPLOI
+                  dateDebut: '2026-03-01'
+                  commentaire: Entreprise non partenaire
+                  nomEntrepriseLibre: Startup XYZ
+                  secteurEntrepriseLibre: Fintech
+                  adresseEntrepriseLibre: Dakar
       responses:
         '201':
           description: Créé
+
+  /apprenants/{apprenantId}/situations:
+    get:
+      tags: [Situations]
+      summary: Lister les situations d'un apprenant
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: apprenantId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: OK
+
+  /situations/{id}:
+    get:
+      tags: [Situations]
+      summary: Détail situation
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: OK
+    put:
+      tags: [Situations]
+      summary: Modifier une situation
+      description: |
+        Vous pouvez basculer entre entreprise interne (`entrepriseId`)
+        et entreprise libre (`nomEntrepriseLibre`).
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateSituationRequest'
+            examples:
+              updateVersInterne:
+                summary: Associer à une entreprise interne
+                value:
+                  statut: EN_STAGE
+                  entrepriseId: 22222222-2222-2222-2222-222222222222
+              updateVersLibre:
+                summary: Associer à une entreprise libre
+                value:
+                  statut: EN_EMPLOI
+                  nomEntrepriseLibre: Startup XYZ
+                  secteurEntrepriseLibre: Fintech
+                  adresseEntrepriseLibre: Dakar
+      responses:
+        '200':
+          description: OK
 
   /situations/{id}/validation:
     patch:
@@ -386,6 +801,115 @@ paths:
       parameters:
         - in: path
           name: apprenantId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: OK
+
+  /documents/{id}:
+    get:
+      tags: [Documents]
+      summary: Détail document
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: OK
+    delete:
+      tags: [Documents]
+      summary: Supprimer un document
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: OK
+
+  /entreprises:
+    get:
+      tags: [Entreprises]
+      summary: Lister les entreprises
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: OK
+    post:
+      tags: [Entreprises]
+      summary: Créer une entreprise
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '201':
+          description: Créé
+
+  /entreprises/{id}:
+    get:
+      tags: [Entreprises]
+      summary: Détail entreprise
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: OK
+    put:
+      tags: [Entreprises]
+      summary: Modifier une entreprise
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: OK
+    delete:
+      tags: [Entreprises]
+      summary: Supprimer une entreprise
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
           required: true
           schema:
             type: string

@@ -1,5 +1,4 @@
 import {
-  IsBoolean,
   IsDateString,
   IsEnum,
   IsOptional,
@@ -10,9 +9,6 @@ import {
 import { STATUT } from '@prisma/client';
 
 export class CreateSituationDto {
-  @IsUUID()
-  apprenantId: string;
-
   @IsEnum(STATUT)
   statut: STATUT;
 
@@ -29,14 +25,21 @@ export class CreateSituationDto {
   commentaire?: string;
 
   @IsOptional()
-  @IsBoolean()
-  valide?: boolean;
-
-  @IsOptional()
-  @IsDateString()
-  dateValidation?: string;
-
-  @IsOptional()
   @IsUUID()
   entrepriseId?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(150)
+  nomEntrepriseLibre?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  secteurEntrepriseLibre?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  adresseEntrepriseLibre?: string;
 }

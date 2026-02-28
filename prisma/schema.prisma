@@ -94,6 +94,10 @@ model SituationProfessionnelle {
   updatedAt      DateTime    @updatedAt
   apprenant      Apprenant   @relation(fields: [apprenantId], references: [id])
   entreprise     Entreprise? @relation(fields: [entrepriseId], references: [id])
+
+   nomEntrepriseLibre     String?
+  secteurEntrepriseLibre String?
+  adresseEntrepriseLibre String?
 }
 
 model Entreprise {

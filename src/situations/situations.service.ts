@@ -74,7 +74,24 @@ export class SituationsService {
     if (!apprenant)
       throw new NotFoundException(APPRENANTS_ERRORS.NOT_FOUND.message);
 
-    if (dto.entrepriseId) await this.ensureEntrepriseExists(dto.entrepriseId);
+    if (dto.entrepriseId) {
+      await this.ensureEntrepriseExists(dto.entrepriseId);
+    }
+    this.validateEntrepriseSource(
+      {
+        entrepriseId: dto.entrepriseId,
+        nomEntrepriseLibre: dto.nomEntrepriseLibre,
+      },
+      false,
+    );
+
+    const entrepriseFields = this.normalizeEntrepriseFields({
+      entrepriseId: dto.entrepriseId,
+      nomEntrepriseLibre: dto.nomEntrepriseLibre,
+      secteurEntrepriseLibre: dto.secteurEntrepriseLibre,
+      adresseEntrepriseLibre: dto.adresseEntrepriseLibre,
+    });
+
     this.validateDates(dto.dateDebut, dto.dateFin);
 
     return this.prisma.situationProfessionnelle.create({
@@ -86,7 +103,7 @@ export class SituationsService {
         commentaire: dto.commentaire,
         valide: false,
         dateValidation: null,
-        entrepriseId: dto.entrepriseId ?? null,
+        ...entrepriseFields,
       },
       include: {
         apprenant: {
@@ -131,7 +148,49 @@ export class SituationsService {
       );
     }
 
-    if (dto.entrepriseId) await this.ensureEntrepriseExists(dto.entrepriseId);
+    if (dto.entrepriseId) {
+      await this.ensureEntrepriseExists(dto.entrepriseId);
+    }
+
+    this.validateEntrepriseSource(
+      {
+        entrepriseId:
+          dto.entrepriseId !== undefined
+            ? dto.entrepriseId
+            : situation.entrepriseId,
+        nomEntrepriseLibre:
+          dto.nomEntrepriseLibre !== undefined
+            ? dto.nomEntrepriseLibre
+            : situation.nomEntrepriseLibre,
+      },
+      true,
+    );
+
+    const entrepriseFields =
+      dto.entrepriseId !== undefined ||
+      dto.nomEntrepriseLibre !== undefined ||
+      dto.secteurEntrepriseLibre !== undefined ||
+      dto.adresseEntrepriseLibre !== undefined
+        ? this.normalizeEntrepriseFields({
+            entrepriseId:
+              dto.entrepriseId !== undefined
+                ? dto.entrepriseId
+                : situation.entrepriseId,
+            nomEntrepriseLibre:
+              dto.nomEntrepriseLibre !== undefined
+                ? dto.nomEntrepriseLibre
+                : situation.nomEntrepriseLibre,
+            secteurEntrepriseLibre:
+              dto.secteurEntrepriseLibre !== undefined
+                ? dto.secteurEntrepriseLibre
+                : situation.secteurEntrepriseLibre,
+            adresseEntrepriseLibre:
+              dto.adresseEntrepriseLibre !== undefined
+                ? dto.adresseEntrepriseLibre
+                : situation.adresseEntrepriseLibre,
+          })
+        : {};
+
     if (dto.dateDebut || dto.dateFin)
       this.validateDates(dto.dateDebut, dto.dateFin);
 
@@ -144,9 +203,7 @@ export class SituationsService {
         ...(dto.commentaire !== undefined
           ? { commentaire: dto.commentaire }
           : {}),
-        ...(dto.entrepriseId !== undefined
-          ? { entrepriseId: dto.entrepriseId }
-          : {}),
+        ...entrepriseFields,
       },
       include: {
         apprenant: {
@@ -268,5 +325,80 @@ export class SituationsService {
         'dateFin doit être supérieure ou égale à dateDebut',
       );
     }
+  }
+  /**
+   * Règle métier:
+   * - création: au moins une source entreprise (entrepriseId OU nomEntrepriseLibre)
+   * - mise à jour: si l'utilisateur touche aux champs entreprise, on vérifie la cohérence
+   */
+  private validateEntrepriseSource(
+    payload: {
+      entrepriseId?: string | null;
+      nomEntrepriseLibre?: string | null;
+    },
+    isUpdate = false,
+  ): void {
+    const hasEntrepriseId = Boolean(payload.entrepriseId);
+    const hasEntrepriseLibre = Boolean(payload.nomEntrepriseLibre?.trim());
+
+    if (!isUpdate) {
+      if (!hasEntrepriseId && !hasEntrepriseLibre) {
+        throw new BadRequestException(
+          'Vous devez fournir soit entrepriseId soit nomEntrepriseLibre',
+        );
+      }
+      return;
+    }
+
+    // En update, on ne force la règle que si l'utilisateur modifie ces champs.
+    if (
+      payload.entrepriseId !== undefined ||
+      payload.nomEntrepriseLibre !== undefined
+    ) {
+      if (!hasEntrepriseId && !hasEntrepriseLibre) {
+        throw new BadRequestException(
+          'Vous devez conserver soit entrepriseId soit nomEntrepriseLibre',
+        );
+      }
+    }
+  }
+
+  /**
+   * Si entreprise interne est utilisée, on nettoie les champs entreprise libre.
+   * Si entreprise libre est utilisée, on vide entrepriseId.
+   */
+  private normalizeEntrepriseFields(payload: {
+    entrepriseId?: string | null;
+    nomEntrepriseLibre?: string | null;
+    secteurEntrepriseLibre?: string | null;
+    adresseEntrepriseLibre?: string | null;
+  }) {
+    const hasEntrepriseId = Boolean(payload.entrepriseId);
+    const hasEntrepriseLibre = Boolean(payload.nomEntrepriseLibre?.trim());
+
+    if (hasEntrepriseId) {
+      return {
+        entrepriseId: payload.entrepriseId,
+        nomEntrepriseLibre: null,
+        secteurEntrepriseLibre: null,
+        adresseEntrepriseLibre: null,
+      };
+    }
+
+    if (hasEntrepriseLibre) {
+      return {
+        entrepriseId: null,
+        nomEntrepriseLibre: payload.nomEntrepriseLibre?.trim() ?? null,
+        secteurEntrepriseLibre: payload.secteurEntrepriseLibre ?? null,
+        adresseEntrepriseLibre: payload.adresseEntrepriseLibre ?? null,
+      };
+    }
+
+    return {
+      entrepriseId: payload.entrepriseId ?? null,
+      nomEntrepriseLibre: payload.nomEntrepriseLibre ?? null,
+      secteurEntrepriseLibre: payload.secteurEntrepriseLibre ?? null,
+      adresseEntrepriseLibre: payload.adresseEntrepriseLibre ?? null,
+    };
   }
 }
