@@ -26,6 +26,9 @@ async function bootstrap() {
   // CORS
   app.enableCors();
 
+  //  exposer uploads/documents en statique.
+  app.useStaticAssets(join(process.cwd(), 'uploads'), { prefix: '/uploads/' });
+
   // Expose la spec YAML en statique pour Swagger UI
   app.useStaticAssets(join(process.cwd(), 'docs'), { prefix: '/docs-assets/' });
 
