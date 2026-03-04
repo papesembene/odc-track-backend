@@ -40,6 +40,15 @@ export class SituationsController {
   }
 
   /**
+   * Retourne les situations en attente de validation.
+   */
+  @Get('/situations/attentes')
+  @Roles(ROLE.POLE_EMPLOI, ROLE.MANAGER)
+  async findPendingValidations() {
+    const data = await this.service.findPendingValidations();
+    return ResponseHelper.success(data);
+  }
+  /**
    * Liste des situations d'un apprenant (POLE_EMPLOI, MANAGER, COACH).
    */
   @Get('/apprenants/:apprenantId/situations')
@@ -105,15 +114,5 @@ export class SituationsController {
   ) {
     const data = await this.service.validateSituation(id, dto);
     return ResponseHelper.success(data, 'Situation validée avec succès');
-  }
-
-  /**
-   * Retourne les situations en attente de validation.
-   */
-  @Get('/situations/attentes')
-  @Roles(ROLE.POLE_EMPLOI, ROLE.MANAGER)
-  async findPendingValidations() {
-    const data = await this.service.findPendingValidations();
-    return ResponseHelper.success(data);
   }
 }
