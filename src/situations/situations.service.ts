@@ -424,4 +424,24 @@ export class SituationsService {
       adresseEntrepriseLibre: payload.adresseEntrepriseLibre ?? null,
     };
   }
+
+  /**
+   * Retourne les situations en attente de validation.
+   */
+  async findPendingValidations() {
+    return this.prisma.situationProfessionnelle.findMany({
+      where: { valide: false },
+      include: {
+        apprenant: {
+          include: {
+            user: { select: { nom: true, prenom: true } },
+            promotion: true,
+            referentiel: true,
+          },
+        },
+        entreprise: true,
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
 }
