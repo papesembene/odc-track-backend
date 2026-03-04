@@ -115,12 +115,33 @@ export class StatistiquesService {
       totalApprenants,
       parStatut.EN_EMPLOI,
     );
+    const totalSituations = await this.prisma.situationProfessionnelle.count();
+    const enAttente = await this.prisma.situationProfessionnelle.count({
+      where: { valide: false },
+    });
+    const validees = await this.prisma.situationProfessionnelle.count({
+      where: { valide: true },
+    });
 
+    const situationsRecentes =
+      await this.prisma.situationProfessionnelle.findMany({
+        orderBy: { createdAt: 'desc' },
+        take: 5,
+        include: {
+          apprenant: {
+            include: { user: { select: { nom: true, prenom: true } } },
+          },
+        },
+      });
     return {
       promotion,
+      totalSituations,
+      enAttente,
+      validees,
       totalApprenants,
       tauxInsertion,
       parStatut,
+      situationsRecentes,
     };
   }
 
