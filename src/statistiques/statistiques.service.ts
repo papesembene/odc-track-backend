@@ -4,122 +4,156 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from 'src/prisma/prisma.service';
+import { Prisma } from '@prisma/client';
 import {
   PROMOTIONS_ERRORS,
   REFERENTIELS_ERRORS,
 } from 'src/common/constants/error-messages.constant';
 import { StatistiquesPeriodeQueryDto } from './dto/statistiques-periode-query.dto';
 
-type ParStatut = {
-  EN_EMPLOI: number;
-  EN_STAGE: number;
-  RECHERCHE_EMPLOI: number;
-  PROJET_PERSO: number;
-  POURSUITE_ETUDES: number;
-};
-
 @Injectable()
 export class StatistiquesService {
   constructor(private readonly prisma: PrismaService) {}
 
-  /**
-   * Construit un objet par statut initialisé à 0.
-   */
-  private buildEmptyParStatut(): ParStatut {
-    return {
-      EN_EMPLOI: 0,
-      EN_STAGE: 0,
-      RECHERCHE_EMPLOI: 0,
-      PROJET_PERSO: 0,
-      POURSUITE_ETUDES: 0,
-    };
-  }
+  // ============================================
+  // OUTILS PRIVÉS
+  // ============================================
 
-  /**
-   * Calcule le nombre d'apprenants uniques en emploi pour un filtre donné.
-   */
-  private async countEnEmploi(where: {
-    apprenant?: { promotionId?: string; referentielId?: string };
+  /** Compteur d'apprenants uniques en emploi */
+  private async countEnEmploi(filter: {
+    promotionId?: string;
+    referentielId?: string;
     createdAt?: { gte?: Date; lte?: Date };
   }): Promise<number> {
+    const where: Prisma.SituationProfessionnelleWhereInput = {
+      statut: 'EN_EMPLOI',
+    };
+
+    if (filter.promotionId || filter.referentielId) {
+      where.apprenant = {};
+      if (filter.promotionId) {
+        where.apprenant.promotionId = filter.promotionId;
+      }
+      if (filter.referentielId) {
+        where.apprenant.referentielId = filter.referentielId;
+      }
+    }
+    if (filter.createdAt) {
+      where.createdAt = filter.createdAt;
+    }
+
     const result = await this.prisma.situationProfessionnelle.findMany({
-      where: {
-        ...where,
-        statut: 'EN_EMPLOI' as const,
-      },
+      where,
       select: { apprenantId: true },
       distinct: ['apprenantId'],
     });
     return result.length;
   }
 
-  /**
-   * Calcule le taux d'insertion en pourcentage.
-   */
-  private computeTauxInsertion(
-    totalApprenants: number,
-    enEmploi: number,
-  ): number {
-    if (totalApprenants === 0) return 0;
-    return Number(((enEmploi / totalApprenants) * 100).toFixed(2));
+  /** Taux d'insertion en pourcentage */
+  private calcTaux(total: number, enEmploi: number): number {
+    return total === 0 ? 0 : Number(((enEmploi / total) * 100).toFixed(2));
   }
 
-  /**
-   * Agrège les situations par statut pour un filtre donné.
-   */
-  private async aggregateParStatut(where: {
-    apprenant?: { promotionId?: string; referentielId?: string };
+  /** Stats par statut */
+  private async getParStatut(filter: {
+    promotionId?: string;
+    referentielId?: string;
     createdAt?: { gte?: Date; lte?: Date };
-  }): Promise<ParStatut> {
+  }) {
+    const where: Prisma.SituationProfessionnelleWhereInput = {};
+
+    if (filter.promotionId || filter.referentielId) {
+      where.apprenant = {};
+      if (filter.promotionId) {
+        where.apprenant.promotionId = filter.promotionId;
+      }
+      if (filter.referentielId) {
+        where.apprenant.referentielId = filter.referentielId;
+      }
+    }
+    if (filter.createdAt) {
+      where.createdAt = filter.createdAt;
+    }
+
     const grouped = await this.prisma.situationProfessionnelle.groupBy({
       by: ['statut'],
       _count: { _all: true },
       where,
     });
 
-    const parStatut = this.buildEmptyParStatut();
+    const parStatut = {
+      EN_EMPLOI: 0,
+      EN_STAGE: 0,
+      RECHERCHE_EMPLOI: 0,
+      PROJET_PERSO: 0,
+      POURSUITE_ETUDES: 0,
+    };
 
     for (const row of grouped) {
-      if (row.statut in parStatut) {
-        parStatut[row.statut as keyof ParStatut] = row._count._all;
-      }
+      if (row.statut in parStatut)
+        parStatut[row.statut as keyof typeof parStatut] = row._count._all;
     }
-
     return parStatut;
   }
 
-  /**
-   * Statistiques globales.
-   */
+  // ============================================
+  // ENDPOINTS
+  // ============================================
+
+  /** Stats globales */
   async getGlobales() {
     const totalApprenants = await this.prisma.apprenant.count();
+    const parStatut = await this.getParStatut({});
+    const enEmploi = await this.countEnEmploi({});
+    const tauxInsertion = this.calcTaux(totalApprenants, enEmploi);
 
-    const parStatut = await this.aggregateParStatut({});
-    const enEmploiUniques = await this.countEnEmploi({});
-
-    const tauxInsertion = this.computeTauxInsertion(
-      totalApprenants,
-      enEmploiUniques,
-    );
-
-    const totalSituations = await this.prisma.situationProfessionnelle.count();
-    const enAttente = await this.prisma.situationProfessionnelle.count({
-      where: { valide: false },
-    });
-    const validees = await this.prisma.situationProfessionnelle.count({
-      where: { valide: true },
-    });
+    const [totalSituations, enAttente, validees] = await Promise.all([
+      this.prisma.situationProfessionnelle.count(),
+      this.prisma.situationProfessionnelle.count({ where: { valide: false } }),
+      this.prisma.situationProfessionnelle.count({ where: { valide: true } }),
+    ]);
 
     const situationsRecentes =
       await this.prisma.situationProfessionnelle.findMany({
         orderBy: { createdAt: 'desc' },
         take: 5,
-        include: {
+        select: {
+          id: true,
+          statut: true,
+          createdAt: true,
+          valide: true,
           apprenant: {
-            include: { user: { select: { nom: true, prenom: true } } },
+            select: { user: { select: { nom: true, prenom: true } } },
           },
         },
       });
+
+    // Stats par promotion
+    const promotions = await this.prisma.promotion.findMany({
+      select: { id: true, nom: true, _count: { select: { apprenants: true } } },
+    });
+    const parPromotion = await Promise.all(
+      promotions.map(async (p) => ({
+        promotionId: p.id,
+        promotionNom: p.nom,
+        total: p._count.apprenants,
+        enEmploi: await this.countEnEmploi({ promotionId: p.id }),
+      })),
+    );
+
+    // Stats par référentiel
+    const referentiels = await this.prisma.referentiel.findMany({
+      select: { id: true, nom: true, _count: { select: { apprenants: true } } },
+    });
+    const parReferentiel = await Promise.all(
+      referentiels.map(async (r) => ({
+        referentielId: r.id,
+        referentielNom: r.nom,
+        total: r._count.apprenants,
+        enEmploi: await this.countEnEmploi({ referentielId: r.id }),
+      })),
+    );
 
     return {
       totalApprenants,
@@ -129,147 +163,109 @@ export class StatistiquesService {
       tauxInsertion,
       parStatut,
       situationsRecentes,
+      parPromotion,
+      parReferentiel,
     };
   }
 
-  /**
-   * Statistiques d'une promotion.
-   */
+  /** Stats par promotion */
   async getByPromotion(promotionId: string) {
     const promotion = await this.prisma.promotion.findUnique({
       where: { id: promotionId },
       select: { id: true, nom: true, annee: true },
     });
-
-    if (!promotion) {
+    if (!promotion)
       throw new NotFoundException(PROMOTIONS_ERRORS.NOT_FOUND.message);
-    }
 
     const totalApprenants = await this.prisma.apprenant.count({
       where: { promotionId },
     });
+    const parStatut = await this.getParStatut({ promotionId });
+    const enEmploi = await this.countEnEmploi({ promotionId });
 
-    const parStatut = await this.aggregateParStatut({
-      apprenant: { promotionId },
-    });
-    const enEmploiUniques = await this.countEnEmploi({
-      apprenant: { promotionId },
-    });
-
-    const tauxInsertion = this.computeTauxInsertion(
-      totalApprenants,
-      enEmploiUniques,
-    );
-    const totalSituations = await this.prisma.situationProfessionnelle.count();
-    const enAttente = await this.prisma.situationProfessionnelle.count({
-      where: { valide: false },
-    });
-    const validees = await this.prisma.situationProfessionnelle.count({
-      where: { valide: true },
-    });
+    const [totalSituations, enAttente, validees] = await Promise.all([
+      this.prisma.situationProfessionnelle.count(),
+      this.prisma.situationProfessionnelle.count({ where: { valide: false } }),
+      this.prisma.situationProfessionnelle.count({ where: { valide: true } }),
+    ]);
 
     const situationsRecentes =
       await this.prisma.situationProfessionnelle.findMany({
         orderBy: { createdAt: 'desc' },
         take: 5,
-        include: {
+        select: {
+          id: true,
+          statut: true,
+          createdAt: true,
+          valide: true,
           apprenant: {
-            include: { user: { select: { nom: true, prenom: true } } },
+            select: { user: { select: { nom: true, prenom: true } } },
           },
         },
       });
+
     return {
       promotion,
+      totalApprenants,
       totalSituations,
       enAttente,
       validees,
-      totalApprenants,
-      tauxInsertion,
+      tauxInsertion: this.calcTaux(totalApprenants, enEmploi),
       parStatut,
       situationsRecentes,
     };
   }
 
-  /**
-   * Statistiques d'un référentiel.
-   */
+  /** Stats par référentiel */
   async getByReferentiel(referentielId: string) {
     const referentiel = await this.prisma.referentiel.findUnique({
       where: { id: referentielId },
       select: { id: true, nom: true },
     });
-
-    if (!referentiel) {
+    if (!referentiel)
       throw new NotFoundException(REFERENTIELS_ERRORS.NOT_FOUND.message);
-    }
 
     const totalApprenants = await this.prisma.apprenant.count({
       where: { referentielId },
     });
-
-    const parStatut = await this.aggregateParStatut({
-      apprenant: { referentielId },
-    });
-    const enEmploiUniques = await this.countEnEmploi({
-      apprenant: { referentielId },
-    });
-
-    const tauxInsertion = this.computeTauxInsertion(
-      totalApprenants,
-      enEmploiUniques,
-    );
+    const parStatut = await this.getParStatut({ referentielId });
+    const enEmploi = await this.countEnEmploi({ referentielId });
 
     return {
       referentiel,
       totalApprenants,
-      tauxInsertion,
+      tauxInsertion: this.calcTaux(totalApprenants, enEmploi),
       parStatut,
     };
   }
 
-  /**
-   * Statistiques sur une période (filtrage par createdAt des situations).
-   */
+  /** Stats par période */
   async getByPeriode(query: StatistiquesPeriodeQueryDto) {
     const { dateFrom, dateTo } = query;
-
     const from = dateFrom ? new Date(dateFrom) : undefined;
     const to = dateTo ? new Date(dateTo) : undefined;
 
-    if (from && to && from > to) {
-      throw new BadRequestException(
-        'dateFrom doit etre inferieure ou egale a dateTo',
-      );
-    }
+    if (from && to && from > to)
+      throw new BadRequestException('dateFrom doit être <= dateTo');
 
     const createdAt = {
       ...(from ? { gte: from } : {}),
       ...(to ? { lte: to } : {}),
     };
-
     const hasDateFilter = Boolean(from || to);
 
     const totalApprenants = await this.prisma.apprenant.count();
-
-    const parStatut = await this.aggregateParStatut(
+    const parStatut = await this.getParStatut(
       hasDateFilter ? { createdAt } : {},
     );
-    const enEmploiUniques = await this.countEnEmploi(
+    const enEmploi = await this.countEnEmploi(
       hasDateFilter ? { createdAt } : {},
-    );
-
-    const tauxInsertion = this.computeTauxInsertion(
-      totalApprenants,
-      enEmploiUniques,
     );
 
     return {
-      periode: {
-        dateFrom: dateFrom ?? null,
-        dateTo: dateTo ?? null,
-      },
+      periode: { dateFrom: dateFrom ?? null, dateTo: dateTo ?? null },
       totalApprenants,
-      tauxInsertion,
+      tauxInsertion: this.calcTaux(totalApprenants, enEmploi),
       parStatut,
     };
   }
