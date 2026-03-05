@@ -44,16 +44,15 @@ export class ApprenantsService {
     if (!promotion)
       throw new NotFoundException(PROMOTIONS_ERRORS.NOT_FOUND.message);
 
-    const promotionReferentiel = await this.prisma.promotionReferentiel.findUnique(
-      {
+    const promotionReferentiel =
+      await this.prisma.promotionReferentiel.findUnique({
         where: {
           promotionId_referentielId: {
             promotionId: dto.promotionId,
             referentielId: dto.referentielId,
           },
         },
-      },
-    );
+      });
     if (!promotionReferentiel) {
       throw new BadRequestException(
         'Le referentiel ne fait pas partie de la promotion',
@@ -112,9 +111,25 @@ export class ApprenantsService {
       ...(query.search
         ? {
             OR: [
-              { user: { is: { nom: { contains: query.search, mode: 'insensitive' } } } },
-              { user: { is: { prenom: { contains: query.search, mode: 'insensitive' } } } },
-              { user: { is: { email: { contains: query.search, mode: 'insensitive' } } } },
+              {
+                user: {
+                  is: { nom: { contains: query.search, mode: 'insensitive' } },
+                },
+              },
+              {
+                user: {
+                  is: {
+                    prenom: { contains: query.search, mode: 'insensitive' },
+                  },
+                },
+              },
+              {
+                user: {
+                  is: {
+                    email: { contains: query.search, mode: 'insensitive' },
+                  },
+                },
+              },
               { adresse: { contains: query.search, mode: 'insensitive' } },
               { telephone: { contains: query.search, mode: 'insensitive' } },
             ],
@@ -140,6 +155,16 @@ export class ApprenantsService {
           },
           referentiel: true,
           promotion: true,
+          _count: {
+            select: {
+              situations: true,
+            },
+          },
+          situations: {
+            select: {
+              valide: true,
+            },
+          },
         },
         orderBy: { [sortBy]: sortOrder },
       }),
@@ -168,6 +193,25 @@ export class ApprenantsService {
         },
         referentiel: true,
         promotion: true,
+        situations: {
+          select: {
+            id: true,
+            statut: true,
+            dateDebut: true,
+            dateFin: true,
+            commentaire: true,
+            valide: true,
+            createdAt: true,
+            nomEntrepriseLibre: true,
+            entreprise: {
+              select: {
+                id: true,
+                nom: true,
+              },
+            },
+          },
+          orderBy: { createdAt: 'desc' },
+        },
       },
     });
 
@@ -202,16 +246,15 @@ export class ApprenantsService {
       if (!referentiel)
         throw new NotFoundException(REFERENTIELS_ERRORS.NOT_FOUND.message);
 
-      const promotionReferentiel = await this.prisma.promotionReferentiel.findUnique(
-        {
+      const promotionReferentiel =
+        await this.prisma.promotionReferentiel.findUnique({
           where: {
             promotionId_referentielId: {
               promotionId: existingApprenant.promotionId,
               referentielId: dto.referentielId,
             },
           },
-        },
-      );
+        });
       if (!promotionReferentiel) {
         throw new BadRequestException(
           'Le referentiel ne fait pas partie de la promotion de l apprenant',

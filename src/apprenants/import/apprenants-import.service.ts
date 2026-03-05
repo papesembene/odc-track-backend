@@ -58,7 +58,6 @@ export class ApprenantsImportService {
         lineNumber,
         hashedPassword,
         promotion.id,
-        promotion.nom,
       );
 
       if (rowError) {
@@ -118,7 +117,6 @@ export class ApprenantsImportService {
         lineNumber,
         hashedPassword,
         referentiel.id,
-        referentiel.nom,
       );
 
       if (rowError) {
@@ -137,14 +135,14 @@ export class ApprenantsImportService {
   }
 
   /**
-   * Traite une ligne CSV et retourne une erreur si échec.
+   * Traite une ligne CSV pour import PAR PROMOTION
+   * (Ne nécessite PAS de colonne referentiel dans le fichier)
    */
   private async processRow(
     row: Record<string, string>,
     lineNumber: number,
     hashedPassword: string,
     promotionId: string,
-    promotionName: string,
   ): Promise<RowError | null> {
     const requiredError = this.rowValidator.validateRequiredFields(
       row,
@@ -153,39 +151,8 @@ export class ApprenantsImportService {
     if (requiredError) return { line: lineNumber, message: requiredError };
 
     const email = row.email.toLowerCase();
-    const referentielName = row.referentiel || row.referentielnom;
 
-    const referentiel = await this.prisma.referentiel.findFirst({
-      where: {
-        nom: {
-          equals: referentielName,
-          mode: 'insensitive',
-        },
-      },
-    });
-    if (!referentiel) {
-      return {
-        line: lineNumber,
-        message: `Referentiel introuvable: ${referentielName}`,
-      };
-    }
-
-    const promotionReferentiel =
-      await this.prisma.promotionReferentiel.findUnique({
-        where: {
-          promotionId_referentielId: {
-            promotionId,
-            referentielId: referentiel.id,
-          },
-        },
-      });
-    if (!promotionReferentiel) {
-      return {
-        line: lineNumber,
-        message: `Referentiel ${referentielName} non associe a la promotion ${promotionName}`,
-      };
-    }
-
+    // Pour l'import par promotion, on utilise le premier référentiel associé à la promotion
     const existingUser = await this.prisma.user.findUnique({
       where: { email },
     });
@@ -214,9 +181,22 @@ export class ApprenantsImportService {
           },
         });
 
+        // Trouver un référentiel par défaut pour cette promotion
+        const promotionReferentiels = await tx.promotionReferentiel.findMany({
+          where: { promotionId },
+          include: { referentiel: true },
+          take: 1,
+        });
+
+        if (promotionReferentiels.length === 0) {
+          throw new Error('Aucun referentiel associe a la promotion');
+        }
+
+        const defaultReferentiel = promotionReferentiels[0];
+
         const apprenantData = {
           userId: user.id,
-          referentielId: referentiel.id,
+          referentielId: defaultReferentiel.referentielId,
           promotionId,
           telephone: row.telephone || null,
           dateNaissance,
@@ -231,6 +211,16 @@ export class ApprenantsImportService {
 
       return null;
     } catch (error: unknown) {
+      if (
+        error instanceof Error &&
+        error.message === 'Aucun referentiel associe a la promotion'
+      ) {
+        return {
+          line: lineNumber,
+          message: 'Aucun referentiel associe a la promotion',
+        };
+      }
+
       if (error instanceof Prisma.PrismaClientKnownRequestError) {
         if (error.code === 'P2002') {
           return {
@@ -254,12 +244,15 @@ export class ApprenantsImportService {
     }
   }
 
+  /**
+   * Traite une ligne CSV pour import PAR REFERENTIEL
+   * (Ne nécessite PAS de colonne promotion dans le fichier)
+   */
   private async processRowByReferentiel(
     row: Record<string, string>,
     lineNumber: number,
     hashedPassword: string,
     referentielId: string,
-    referentielName: string,
   ): Promise<RowError | null> {
     const requiredError = this.rowValidator.validateRequiredFields(
       row,
@@ -268,39 +261,8 @@ export class ApprenantsImportService {
     if (requiredError) return { line: lineNumber, message: requiredError };
 
     const email = row.email.toLowerCase();
-    const promotionName = row.promotion || row.promotionnom;
 
-    const promotion = await this.prisma.promotion.findFirst({
-      where: {
-        nom: {
-          equals: promotionName,
-          mode: 'insensitive',
-        },
-      },
-    });
-    if (!promotion) {
-      return {
-        line: lineNumber,
-        message: `Promotion introuvable: ${promotionName}`,
-      };
-    }
-
-    const promotionReferentiel =
-      await this.prisma.promotionReferentiel.findUnique({
-        where: {
-          promotionId_referentielId: {
-            promotionId: promotion.id,
-            referentielId,
-          },
-        },
-      });
-    if (!promotionReferentiel) {
-      return {
-        line: lineNumber,
-        message: `Promotion ${promotionName} non associee au referentiel ${referentielName}`,
-      };
-    }
-
+    // Pour l'import par référentiel, on utilise la première promotion associée au référentiel
     const existingUser = await this.prisma.user.findUnique({
       where: { email },
     });
@@ -329,10 +291,23 @@ export class ApprenantsImportService {
           },
         });
 
+        // Trouver une promotion par défaut pour ce référentiel
+        const referentielPromotions = await tx.promotionReferentiel.findMany({
+          where: { referentielId },
+          include: { promotion: true },
+          take: 1,
+        });
+
+        if (referentielPromotions.length === 0) {
+          throw new Error('Aucune promotion associee au referentiel');
+        }
+
+        const defaultPromotion = referentielPromotions[0];
+
         const apprenantData = {
           userId: user.id,
           referentielId,
-          promotionId: promotion.id,
+          promotionId: defaultPromotion.promotionId,
           telephone: row.telephone || null,
           dateNaissance,
           genre: row.genre,
@@ -346,6 +321,16 @@ export class ApprenantsImportService {
 
       return null;
     } catch (error: unknown) {
+      if (
+        error instanceof Error &&
+        error.message === 'Aucune promotion associee au referentiel'
+      ) {
+        return {
+          line: lineNumber,
+          message: 'Aucune promotion associee au referentiel',
+        };
+      }
+
       if (error instanceof Prisma.PrismaClientKnownRequestError) {
         if (error.code === 'P2002') {
           return {

@@ -36,6 +36,24 @@ export class StatistiquesService {
   }
 
   /**
+   * Calcule le nombre d'apprenants uniques en emploi pour un filtre donné.
+   */
+  private async countEnEmploi(where: {
+    apprenant?: { promotionId?: string; referentielId?: string };
+    createdAt?: { gte?: Date; lte?: Date };
+  }): Promise<number> {
+    const result = await this.prisma.situationProfessionnelle.findMany({
+      where: {
+        ...where,
+        statut: 'EN_EMPLOI' as const,
+      },
+      select: { apprenantId: true },
+      distinct: ['apprenantId'],
+    });
+    return result.length;
+  }
+
+  /**
    * Calcule le taux d'insertion en pourcentage.
    */
   private computeTauxInsertion(
@@ -77,10 +95,11 @@ export class StatistiquesService {
     const totalApprenants = await this.prisma.apprenant.count();
 
     const parStatut = await this.aggregateParStatut({});
+    const enEmploiUniques = await this.countEnEmploi({});
 
     const tauxInsertion = this.computeTauxInsertion(
       totalApprenants,
-      parStatut.EN_EMPLOI,
+      enEmploiUniques,
     );
 
     const totalSituations = await this.prisma.situationProfessionnelle.count();
@@ -133,10 +152,13 @@ export class StatistiquesService {
     const parStatut = await this.aggregateParStatut({
       apprenant: { promotionId },
     });
+    const enEmploiUniques = await this.countEnEmploi({
+      apprenant: { promotionId },
+    });
 
     const tauxInsertion = this.computeTauxInsertion(
       totalApprenants,
-      parStatut.EN_EMPLOI,
+      enEmploiUniques,
     );
     const totalSituations = await this.prisma.situationProfessionnelle.count();
     const enAttente = await this.prisma.situationProfessionnelle.count({
@@ -188,10 +210,13 @@ export class StatistiquesService {
     const parStatut = await this.aggregateParStatut({
       apprenant: { referentielId },
     });
+    const enEmploiUniques = await this.countEnEmploi({
+      apprenant: { referentielId },
+    });
 
     const tauxInsertion = this.computeTauxInsertion(
       totalApprenants,
-      parStatut.EN_EMPLOI,
+      enEmploiUniques,
     );
 
     return {
@@ -229,10 +254,13 @@ export class StatistiquesService {
     const parStatut = await this.aggregateParStatut(
       hasDateFilter ? { createdAt } : {},
     );
+    const enEmploiUniques = await this.countEnEmploi(
+      hasDateFilter ? { createdAt } : {},
+    );
 
     const tauxInsertion = this.computeTauxInsertion(
       totalApprenants,
-      parStatut.EN_EMPLOI,
+      enEmploiUniques,
     );
 
     return {

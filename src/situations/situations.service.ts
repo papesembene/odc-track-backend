@@ -257,8 +257,8 @@ export class SituationsService {
     return this.prisma.situationProfessionnelle.update({
       where: { id },
       data: {
-        valide: true,
-        dateValidation: new Date(),
+        valide: dto.valide ?? true,
+        dateValidation: dto.valide ? new Date() : null,
         ...(dto.commentaire ? { commentaire: dto.commentaire } : {}),
       },
       include: {
