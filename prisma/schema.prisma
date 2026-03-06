@@ -3,8 +3,8 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
   directUrl = env("DIRECT_URL")
 }
 
@@ -43,14 +43,14 @@ model Apprenant {
 }
 
 model Coach {
-  id            String     @id @default(uuid())
+  id            String      @id @default(uuid())
   specialite    String?
-  createdAt     DateTime   @default(now())
-  updatedAt     DateTime   @updatedAt
-  userId        String     @unique
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+  userId        String      @unique
   referentielId String
-  utilisateur   User       @relation(fields: [userId], references: [id])
   referentiel   Referentiel @relation(fields: [referentielId], references: [id])
+  utilisateur   User        @relation(fields: [userId], references: [id])
 }
 
 model Referentiel {
@@ -60,17 +60,17 @@ model Referentiel {
   createdAt   DateTime               @default(now())
   updatedAt   DateTime               @updatedAt
   apprenants  Apprenant[]
-  promotions  PromotionReferentiel[]
   coaches     Coach[]
+  promotions  PromotionReferentiel[]
 }
 
 model Promotion {
   id           String                 @id @default(uuid())
   nom          String
   annee        Int
-  estActive    Boolean                @default(false)
   createdAt    DateTime               @default(now())
   updatedAt    DateTime               @updatedAt
+  estActive    Boolean                @default(false)
   apprenants   Apprenant[]
   referentiels PromotionReferentiel[]
 }
@@ -85,26 +85,23 @@ model PromotionReferentiel {
 }
 
 model SituationProfessionnelle {
-  id             String      @id @default(uuid())
-  statut         STATUT
-  dateDebut      DateTime
-  dateFin        DateTime?
-  commentaire    String?
-  valide         Boolean     @default(false)
-  dateValidation DateTime?
-  apprenantId    String
-  entrepriseId   String?
-  createdAt      DateTime    @default(now())
-  updatedAt      DateTime    @updatedAt
-  apprenant      Apprenant   @relation(fields: [apprenantId], references: [id])
-  entreprise     Entreprise? @relation(fields: [entrepriseId], references: [id])
-
-   nomEntrepriseLibre     String?
-  secteurEntrepriseLibre String?
+  id                     String      @id @default(uuid())
+  statut                 STATUT
+  dateDebut              DateTime
+  dateFin                DateTime?
+  commentaire            String?
+  valide                 Boolean     @default(false)
+  dateValidation         DateTime?
+  apprenantId            String
+  entrepriseId           String?
+  createdAt              DateTime    @default(now())
+  updatedAt              DateTime    @updatedAt
   adresseEntrepriseLibre String?
-
-  documents Document[]
-
+  nomEntrepriseLibre     String?
+  secteurEntrepriseLibre String?
+  documents              Document[]
+  apprenant              Apprenant   @relation(fields: [apprenantId], references: [id])
+  entreprise             Entreprise? @relation(fields: [entrepriseId], references: [id])
 }
 
 model Entreprise {
@@ -120,18 +117,16 @@ model Entreprise {
 }
 
 model Document {
-  id          String    @id @default(uuid())
+  id          String                    @id @default(uuid())
   type        DOCTYPE
   fichier     String
-  dateUpload  DateTime  @default(now())
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  dateUpload  DateTime                  @default(now())
+  createdAt   DateTime                  @default(now())
+  updatedAt   DateTime                  @updatedAt
   apprenantId String
-  apprenant   Apprenant @relation(fields: [apprenantId], references: [id])
-
   situationId String?
+  apprenant   Apprenant                 @relation(fields: [apprenantId], references: [id])
   situation   SituationProfessionnelle? @relation(fields: [situationId], references: [id])
-
 }
 
 enum ROLE {

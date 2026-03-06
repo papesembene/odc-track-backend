@@ -25,6 +25,17 @@ export class DocumentsService {
     private readonly storage: LocalDocumentsStorageService,
   ) {}
 
+  private readonly documentListSelect = {
+    id: true,
+    type: true,
+    fichier: true,
+    dateUpload: true,
+    createdAt: true,
+    updatedAt: true,
+    apprenantId: true,
+    situationId: true,
+  } as const;
+
   /**
    * Liste les documents d'un apprenant avec pagination et filtres.
    * L'accès est contrôlé: staff autorisé, apprenant uniquement sur son propre profil.
@@ -141,6 +152,7 @@ export class DocumentsService {
     if (staffRoles.includes(requesterRole)) {
       return this.prisma.document.findMany({
         where: { situationId },
+        select: this.documentListSelect,
         orderBy: { createdAt: 'desc' },
       });
     }
@@ -153,6 +165,7 @@ export class DocumentsService {
 
       return this.prisma.document.findMany({
         where: { situationId },
+        select: this.documentListSelect,
         orderBy: { createdAt: 'desc' },
       });
     }
@@ -234,24 +247,11 @@ export class DocumentsService {
    * Vérifie qu'un document existe.
    */
   private async ensureDocumentExists(id: string) {
+    // Pour les controles d'acces, on ne lit que l'identite du document
+    // et son rattachement a l'apprenant. Le detail complet n'est pas utile ici.
     const document = await this.prisma.document.findUnique({
       where: { id },
-      include: {
-        apprenant: {
-          include: {
-            user: {
-              select: {
-                id: true,
-                nom: true,
-                prenom: true,
-                email: true,
-                role: true,
-                actif: true,
-              },
-            },
-          },
-        },
-      },
+      select: this.documentListSelect,
     });
 
     if (!document) {

@@ -3,6 +3,7 @@ import {
   Get,
   Post,
   Body,
+  Query,
   UseGuards,
   HttpCode,
   HttpStatus,
@@ -15,6 +16,7 @@ import { RolesGuard } from 'src/auth/guards/roles.guard';
 import { ResponseHelper } from 'src/common/helpers/response.helper';
 import { CoachesService } from './coaches.service';
 import { CreateCoachDto } from './dto/create-coach.dto';
+import { CoachesQueryDto } from './dto/coaches-query.dto';
 
 @Controller('coaches')
 @ApiBearerAuth()
@@ -29,8 +31,8 @@ export class CoachesController {
    */
   @Get()
   @Roles(ROLE.MANAGER, ROLE.ADMIN)
-  async findAll() {
-    const data = await this.coachesService.findAll();
+  async findAll(@Query() query: CoachesQueryDto) {
+    const data = await this.coachesService.findAll(query);
     return ResponseHelper.success(data);
   }
 

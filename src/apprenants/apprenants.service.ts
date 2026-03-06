@@ -161,9 +161,13 @@ export class ApprenantsService {
             },
           },
           situations: {
+            where: {
+              valide: true,
+            },
             select: {
               valide: true,
             },
+            take: 1,
           },
         },
         orderBy: { [sortBy]: sortOrder },

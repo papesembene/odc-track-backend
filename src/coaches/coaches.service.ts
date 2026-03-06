@@ -1,33 +1,70 @@
 import { Injectable, ConflictException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { USER_ERRORS } from 'src/common/constants/error-messages.constant';
 import * as bcrypt from 'bcrypt';
 import { CreateCoachDto } from './dto/create-coach.dto';
+import { CoachesQueryDto } from './dto/coaches-query.dto';
+import {
+  buildPaginationMeta,
+  normalizePagination,
+} from 'src/common/helpers/pagination.helper';
 
 @Injectable()
 export class CoachesService {
   constructor(private readonly prisma: PrismaService) {}
 
-  /**
-   * Récupérer la liste de tous les coaches
-   */
-  async findAll() {
-    const coaches = await this.prisma.user.findMany({
-      where: { role: 'COACH' },
-      include: {
-        coach: {
-          include: {
-            referentiel: {
-              select: {
-                id: true,
-                nom: true,
-              },
-            },
+  private readonly coachListSelect = {
+    id: true,
+    nom: true,
+    prenom: true,
+    email: true,
+    role: true,
+    actif: true,
+    createdAt: true,
+    updatedAt: true,
+    coach: {
+      select: {
+        specialite: true,
+        referentiel: {
+          select: {
+            id: true,
+            nom: true,
           },
         },
       },
-      orderBy: { createdAt: 'desc' },
-    });
+    },
+  } as const;
+
+  /**
+   * Récupérer la liste de tous les coaches
+   */
+  async findAll(query: CoachesQueryDto) {
+    const { page, limit, skip } = normalizePagination(query);
+    const where: Prisma.UserWhereInput = {
+      role: 'COACH',
+      ...(query.search
+        ? {
+            OR: [
+              { nom: { contains: query.search, mode: 'insensitive' } },
+              { prenom: { contains: query.search, mode: 'insensitive' } },
+              { email: { contains: query.search, mode: 'insensitive' } },
+            ],
+          }
+        : {}),
+    };
+
+    // On lit uniquement les champs affiches dans les listes manager.
+    const [coaches, totalItems] = await this.prisma.$transaction([
+      this.prisma.user.findMany({
+        where,
+        skip,
+        take: limit,
+        select: this.coachListSelect,
+        orderBy: { createdAt: 'desc' },
+      }),
+      this.prisma.user.count({ where }),
+    ]);
 
     // Transformer pour avoir une structure plate
     const items = coaches.map((user) => ({
@@ -47,12 +84,7 @@ export class CoachesService {
 
     return {
       items,
-      pagination: {
-        page: 1,
-        limit: items.length,
-        totalItems: items.length,
-        totalPages: 1,
-      },
+      pagination: buildPaginationMeta(page, limit, totalItems),
     };
   }
 

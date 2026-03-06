@@ -5,6 +5,7 @@ import { CreatePromotionDto } from './dto/create-promotion.dto';
 import { PromotionsQueryDto } from './dto/promotions-query.dto';
 import { UpdatePromotionDto } from './dto/update-promotion.dto';
 import { PROMOTIONS_ERRORS } from 'src/common/constants/error-messages.constant';
+import { CacheVersionService } from 'src/common/services/cache-version.service';
 import {
   buildPaginationMeta,
   normalizePagination,
@@ -13,8 +14,31 @@ import {
 @Injectable()
 export class PromotionsService {
   private readonly logger = new Logger(PromotionsService.name);
+  private readonly promotionWithReferentielsSelect = {
+    id: true,
+    nom: true,
+    annee: true,
+    estActive: true,
+    createdAt: true,
+    updatedAt: true,
+    referentiels: {
+      select: {
+        referentielId: true,
+        referentiel: {
+          select: {
+            id: true,
+            nom: true,
+            description: true,
+          },
+        },
+      },
+    },
+  } as const;
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly cacheVersionService: CacheVersionService,
+  ) {}
 
   async create(dto: CreatePromotionDto) {
     return this.prisma.promotion.create({
@@ -27,13 +51,7 @@ export class PromotionsService {
           })),
         },
       },
-      include: {
-        referentiels: {
-          include: {
-            referentiel: true,
-          },
-        },
-      },
+      select: this.promotionWithReferentielsSelect,
     });
   }
 
@@ -63,13 +81,8 @@ export class PromotionsService {
         where,
         skip,
         take: limit,
-        include: {
-          referentiels: {
-            include: {
-              referentiel: true,
-            },
-          },
-        },
+        // On selectionne uniquement les champs utiles aux ecrans et filtres.
+        select: this.promotionWithReferentielsSelect,
         orderBy: { [sortBy]: sortOrder },
       }),
       this.prisma.promotion.count({ where }),
@@ -84,13 +97,7 @@ export class PromotionsService {
   async findOne(id: string) {
     const item = await this.prisma.promotion.findUnique({
       where: { id },
-      include: {
-        referentiels: {
-          include: {
-            referentiel: true,
-          },
-        },
-      },
+      select: this.promotionWithReferentielsSelect,
     });
 
     if (!item) {
@@ -122,13 +129,7 @@ export class PromotionsService {
             }
           : {}),
       },
-      include: {
-        referentiels: {
-          include: {
-            referentiel: true,
-          },
-        },
-      },
+      select: this.promotionWithReferentielsSelect,
     });
   }
 
@@ -164,17 +165,16 @@ export class PromotionsService {
       const updated = await tx.promotion.update({
         where: { id },
         data: { estActive: true },
-        include: {
-          referentiels: {
-            include: {
-              referentiel: true,
-            },
-          },
-        },
+        select: this.promotionWithReferentielsSelect,
       });
 
       return updated;
     });
+
+    // Une promotion active modifie directement les statistiques manager.
+    // On invalide donc le cache des stats pour que la prochaine lecture
+    // recalcule immediatement les donnees.
+    this.cacheVersionService.bumpVersion('global-stats');
 
     return result;
   }
@@ -186,13 +186,7 @@ export class PromotionsService {
     try {
       return await this.prisma.promotion.findFirst({
         where: { estActive: true },
-        include: {
-          referentiels: {
-            include: {
-              referentiel: true,
-            },
-          },
-        },
+        select: this.promotionWithReferentielsSelect,
       });
     } catch (error) {
       if (!this.isMissingEstActiveColumnError(error)) {
@@ -205,13 +199,7 @@ export class PromotionsService {
 
       return this.prisma.promotion.findFirst({
         orderBy: [{ annee: 'desc' }, { createdAt: 'desc' }],
-        include: {
-          referentiels: {
-            include: {
-              referentiel: true,
-            },
-          },
-        },
+        select: this.promotionWithReferentielsSelect,
       });
     }
   }

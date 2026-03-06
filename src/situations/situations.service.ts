@@ -15,6 +15,63 @@ import { APPRENANTS_ERRORS } from 'src/common/constants/error-messages.constant'
 export class SituationsService {
   constructor(private readonly prisma: PrismaService) {}
 
+  private readonly userIdentitySelect = {
+    id: true,
+    nom: true,
+    prenom: true,
+    email: true,
+    role: true,
+    actif: true,
+  } as const;
+
+  private readonly situationBaseInclude = {
+    entreprise: true,
+    apprenant: {
+      include: {
+        user: {
+          select: this.userIdentitySelect,
+        },
+      },
+    },
+  } as const;
+
+  private readonly pendingValidationSelect = {
+    id: true,
+    statut: true,
+    dateDebut: true,
+    dateFin: true,
+    createdAt: true,
+    nomEntrepriseLibre: true,
+    entreprise: {
+      select: {
+        id: true,
+        nom: true,
+      },
+    },
+    apprenant: {
+      select: {
+        user: {
+          select: {
+            nom: true,
+            prenom: true,
+          },
+        },
+        promotion: {
+          select: {
+            id: true,
+            nom: true,
+          },
+        },
+        referentiel: {
+          select: {
+            id: true,
+            nom: true,
+          },
+        },
+      },
+    },
+  } as const;
+
   /**
    * Retourne toutes les situations d'un apprenant.
    */
@@ -23,23 +80,7 @@ export class SituationsService {
 
     return this.prisma.situationProfessionnelle.findMany({
       where: { apprenantId },
-      include: {
-        apprenant: {
-          include: {
-            user: {
-              select: {
-                id: true,
-                nom: true,
-                prenom: true,
-                email: true,
-                role: true,
-                actif: true,
-              },
-            },
-          },
-        },
-        entreprise: true,
-      },
+      include: this.situationBaseInclude,
       orderBy: { dateDebut: 'desc' },
     });
   }
@@ -128,23 +169,7 @@ export class SituationsService {
         dateValidation: null,
         ...entrepriseFields,
       },
-      include: {
-        apprenant: {
-          include: {
-            user: {
-              select: {
-                id: true,
-                nom: true,
-                prenom: true,
-                email: true,
-                role: true,
-                actif: true,
-              },
-            },
-          },
-        },
-        entreprise: true,
-      },
+      include: this.situationBaseInclude,
     });
   }
 
@@ -228,23 +253,7 @@ export class SituationsService {
           : {}),
         ...entrepriseFields,
       },
-      include: {
-        apprenant: {
-          include: {
-            user: {
-              select: {
-                id: true,
-                nom: true,
-                prenom: true,
-                email: true,
-                role: true,
-                actif: true,
-              },
-            },
-          },
-        },
-        entreprise: true,
-      },
+      include: this.situationBaseInclude,
     });
   }
 
@@ -261,23 +270,7 @@ export class SituationsService {
         dateValidation: dto.valide ? new Date() : null,
         ...(dto.commentaire ? { commentaire: dto.commentaire } : {}),
       },
-      include: {
-        apprenant: {
-          include: {
-            user: {
-              select: {
-                id: true,
-                nom: true,
-                prenom: true,
-                email: true,
-                role: true,
-                actif: true,
-              },
-            },
-          },
-        },
-        entreprise: true,
-      },
+      include: this.situationBaseInclude,
     });
   }
 
@@ -285,25 +278,11 @@ export class SituationsService {
    * Retourne une situation par id.
    */
   private async findOne(id: string) {
+    // On centralise la forme de lecture d'une situation pour eviter les
+    // divergences et limiter les includes redondants dans tout le service.
     const item = await this.prisma.situationProfessionnelle.findUnique({
       where: { id },
-      include: {
-        apprenant: {
-          include: {
-            user: {
-              select: {
-                id: true,
-                nom: true,
-                prenom: true,
-                email: true,
-                role: true,
-                actif: true,
-              },
-            },
-          },
-        },
-        entreprise: true,
-      },
+      include: this.situationBaseInclude,
     });
 
     if (!item) throw new NotFoundException('Situation introuvable');
@@ -316,6 +295,7 @@ export class SituationsService {
   private async ensureApprenantExists(apprenantId: string): Promise<void> {
     const apprenant = await this.prisma.apprenant.findUnique({
       where: { id: apprenantId },
+      select: { id: true },
     });
     if (!apprenant) throw new NotFoundException('Apprenant introuvable');
   }
@@ -326,6 +306,7 @@ export class SituationsService {
   private async ensureEntrepriseExists(entrepriseId: string): Promise<void> {
     const entreprise = await this.prisma.entreprise.findUnique({
       where: { id: entrepriseId },
+      select: { id: true },
     });
     if (!entreprise) throw new NotFoundException('Entreprise introuvable');
   }
@@ -435,16 +416,9 @@ export class SituationsService {
         valide: false,
         ...(promotionId ? { apprenant: { promotionId } } : {}),
       },
-      include: {
-        apprenant: {
-          include: {
-            user: { select: { nom: true, prenom: true } },
-            promotion: true,
-            referentiel: true,
-          },
-        },
-        entreprise: true,
-      },
+      // Cette liste sert a l'ecran de validation: on ne charge donc
+      // que les champs affiches dans cette vue.
+      select: this.pendingValidationSelect,
       orderBy: { createdAt: 'desc' },
     });
   }

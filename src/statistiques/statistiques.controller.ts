@@ -6,6 +6,7 @@ import { JwtAuthGuard } from 'src/auth/guards/jwt-auth.guard';
 import { RolesGuard } from 'src/auth/guards/roles.guard';
 import { ResponseHelper } from 'src/common/helpers/response.helper';
 import { PromotionsService } from 'src/promotions/promotions.service';
+import { StatistiquesGlobalesQueryDto } from './dto/statistiques-globales-query.dto';
 import { StatistiquesPeriodeQueryDto } from './dto/statistiques-periode-query.dto';
 import { StatistiquesService } from './statistiques.service';
 
@@ -23,11 +24,12 @@ export class StatistiquesController {
    */
   @Get('globales')
   @Roles(ROLE.POLE_EMPLOI, ROLE.MANAGER)
-  async globales() {
+  async globales(@Query() query: StatistiquesGlobalesQueryDto) {
     // Filtrer automatiquement par la promotion active pour MANAGER et POLE_EMPLOI
     const activePromotion = await this.promotionsService.getActive();
     const data = await this.service.getGlobales(
       activePromotion ? activePromotion.id : undefined,
+      query,
     );
     return ResponseHelper.success(data);
   }
