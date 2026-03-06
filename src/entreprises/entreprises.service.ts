@@ -14,6 +14,17 @@ import { ENTREPRISES_ERRORS } from 'src/common/constants/error-messages.constant
 export class EntreprisesService {
   constructor(private readonly prisma: PrismaService) {}
 
+  private readonly entrepriseSelect = {
+    id: true,
+    nom: true,
+    secteur: true,
+    adresse: true,
+    telephone: true,
+    email: true,
+    createdAt: true,
+    updatedAt: true,
+  } as const;
+
   async create(dto: CreateEntrepriseDto) {
     return this.prisma.entreprise.create({ data: dto });
   }
@@ -44,6 +55,8 @@ export class EntreprisesService {
         where,
         skip,
         take: limit,
+        // Les listes et details n'utilisent que ces colonnes.
+        select: this.entrepriseSelect,
         orderBy: { [sortBy]: sortOrder },
       }),
       this.prisma.entreprise.count({ where }),
@@ -56,7 +69,10 @@ export class EntreprisesService {
   }
 
   async findOne(id: string) {
-    const item = await this.prisma.entreprise.findUnique({ where: { id } });
+    const item = await this.prisma.entreprise.findUnique({
+      where: { id },
+      select: this.entrepriseSelect,
+    });
     if (!item)
       throw new NotFoundException(ENTREPRISES_ERRORS.NOT_FOUND.message);
     return item;

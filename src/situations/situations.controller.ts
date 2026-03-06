@@ -8,6 +8,7 @@ import {
   Patch,
   Post,
   Put,
+  Query,
   Req,
   UseGuards,
 } from '@nestjs/common';
@@ -21,6 +22,7 @@ import { ResponseHelper } from 'src/common/helpers/response.helper';
 import { PromotionsService } from 'src/promotions/promotions.service';
 import { SituationsService } from './situations.service';
 import { CreateSituationDto } from './dto/create-situation.dto';
+import { SituationsQueryDto } from './dto/situations-query.dto';
 import { UpdateSituationDto } from './dto/update-situation.dto';
 import { ValidateSituationDto } from './dto/validate-situation.dto';
 
@@ -38,8 +40,11 @@ export class SituationsController {
    */
   @Get('/apprenants/me/situations')
   @Roles(ROLE.APPRENANT)
-  async findMySituations(@Req() req: Request & { user: { id: string } }) {
-    const data = await this.service.findMySituations(req.user.id);
+  async findMySituations(
+    @Req() req: Request & { user: { id: string } },
+    @Query() query: SituationsQueryDto,
+  ) {
+    const data = await this.service.findMySituations(req.user.id, query);
     return ResponseHelper.success(data);
   }
 
@@ -48,11 +53,12 @@ export class SituationsController {
    */
   @Get('/situations/attentes')
   @Roles(ROLE.POLE_EMPLOI, ROLE.MANAGER)
-  async findPendingValidations() {
+  async findPendingValidations(@Query() query: SituationsQueryDto) {
     // Filtrer automatiquement par la promotion active pour MANAGER et POLE_EMPLOI
     const activePromotion = await this.promotionsService.getActive();
     const data = await this.service.findPendingValidations(
       activePromotion ? activePromotion.id : undefined,
+      query,
     );
     return ResponseHelper.success(data);
   }
@@ -61,8 +67,11 @@ export class SituationsController {
    */
   @Get('/apprenants/:apprenantId/situations')
   @Roles(ROLE.POLE_EMPLOI, ROLE.MANAGER, ROLE.COACH)
-  async findByApprenant(@Param('apprenantId') apprenantId: string) {
-    const data = await this.service.findByApprenant(apprenantId);
+  async findByApprenant(
+    @Param('apprenantId') apprenantId: string,
+    @Query() query: SituationsQueryDto,
+  ) {
+    const data = await this.service.findByApprenant(apprenantId, query);
     return ResponseHelper.success(data);
   }
 

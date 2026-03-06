@@ -5,11 +5,16 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from 'src/prisma/prisma.service';
-import { ROLE } from '@prisma/client';
+import { Prisma, ROLE } from '@prisma/client';
 import { CreateSituationDto } from './dto/create-situation.dto';
+import { SituationsQueryDto } from './dto/situations-query.dto';
 import { UpdateSituationDto } from './dto/update-situation.dto';
 import { ValidateSituationDto } from './dto/validate-situation.dto';
 import { APPRENANTS_ERRORS } from 'src/common/constants/error-messages.constant';
+import {
+  buildPaginationMeta,
+  normalizePagination,
+} from 'src/common/helpers/pagination.helper';
 
 @Injectable()
 export class SituationsService {
@@ -72,23 +77,70 @@ export class SituationsService {
     },
   } as const;
 
+  private readonly mySituationSelect = {
+    id: true,
+    statut: true,
+    valide: true,
+    dateDebut: true,
+    dateFin: true,
+    commentaire: true,
+    nomEntrepriseLibre: true,
+    secteurEntrepriseLibre: true,
+    adresseEntrepriseLibre: true,
+    entreprise: {
+      select: {
+        id: true,
+        nom: true,
+        secteur: true,
+        adresse: true,
+      },
+    },
+    documents: {
+      select: {
+        id: true,
+        type: true,
+        fichier: true,
+        createdAt: true,
+        dateUpload: true,
+      },
+      orderBy: { createdAt: 'desc' as const },
+    },
+  } as const;
+
   /**
    * Retourne toutes les situations d'un apprenant.
    */
-  async findByApprenant(apprenantId: string) {
+  async findByApprenant(apprenantId: string, query: SituationsQueryDto) {
     await this.ensureApprenantExists(apprenantId);
-
-    return this.prisma.situationProfessionnelle.findMany({
-      where: { apprenantId },
-      include: this.situationBaseInclude,
-      orderBy: { dateDebut: 'desc' },
+    const { page, limit, skip } = normalizePagination(query);
+    const sortBy = query.sortBy ?? 'dateDebut';
+    const sortOrder = query.sortOrder ?? 'desc';
+    const where = this.buildSituationsWhere({
+      ...query,
+      apprenantId,
     });
+
+    const [items, totalItems] = await this.prisma.$transaction([
+      this.prisma.situationProfessionnelle.findMany({
+        where,
+        skip,
+        take: limit,
+        include: this.situationBaseInclude,
+        orderBy: { [sortBy]: sortOrder },
+      }),
+      this.prisma.situationProfessionnelle.count({ where }),
+    ]);
+
+    return {
+      items,
+      pagination: buildPaginationMeta(page, limit, totalItems),
+    };
   }
 
   /**
    * Retourne l'historique des situations de l'apprenant connecté.
    */
-  async findMySituations(userId: string) {
+  async findMySituations(userId: string, query: SituationsQueryDto) {
     const apprenant = await this.prisma.apprenant.findUnique({
       where: { userId },
       select: { id: true },
@@ -98,14 +150,31 @@ export class SituationsService {
       throw new NotFoundException(APPRENANTS_ERRORS.NOT_FOUND.message);
     }
 
-    return this.prisma.situationProfessionnelle.findMany({
-      where: { apprenantId: apprenant.id },
-      include: {
-        entreprise: true,
-        documents: true,
-      },
-      orderBy: { dateDebut: 'desc' },
+    const { page, limit, skip } = normalizePagination(query);
+    const sortBy = query.sortBy ?? 'dateDebut';
+    const sortOrder = query.sortOrder ?? 'desc';
+    const where = this.buildSituationsWhere({
+      ...query,
+      apprenantId: apprenant.id,
     });
+
+    const [items, totalItems] = await this.prisma.$transaction([
+      this.prisma.situationProfessionnelle.findMany({
+        where,
+        skip,
+        take: limit,
+        // Cette vue sert aux ecrans apprenant/documents. On ne charge
+        // que les champs effectivement affiches ou relies.
+        select: this.mySituationSelect,
+        orderBy: { [sortBy]: sortOrder },
+      }),
+      this.prisma.situationProfessionnelle.count({ where }),
+    ]);
+
+    return {
+      items,
+      pagination: buildPaginationMeta(page, limit, totalItems),
+    };
   }
 
   /**
@@ -410,16 +479,59 @@ export class SituationsService {
    * Retourne les situations en attente de validation.
    * @param promotionId - filtrer par promotion (optionnel)
    */
-  async findPendingValidations(promotionId?: string) {
-    return this.prisma.situationProfessionnelle.findMany({
-      where: {
-        valide: false,
-        ...(promotionId ? { apprenant: { promotionId } } : {}),
-      },
-      // Cette liste sert a l'ecran de validation: on ne charge donc
-      // que les champs affiches dans cette vue.
-      select: this.pendingValidationSelect,
-      orderBy: { createdAt: 'desc' },
+  async findPendingValidations(
+    promotionId?: string,
+    query: SituationsQueryDto = {},
+  ) {
+    const { page, limit, skip } = normalizePagination(query);
+    const sortBy = query.sortBy ?? 'createdAt';
+    const sortOrder = query.sortOrder ?? 'desc';
+    const where = this.buildSituationsWhere({
+      ...query,
+      valide: false,
+      ...(promotionId ? { apprenantId: undefined } : {}),
     });
+
+    const pendingWhere: Prisma.SituationProfessionnelleWhereInput = {
+      ...where,
+      valide: false,
+      ...(promotionId ? { apprenant: { promotionId } } : {}),
+    };
+
+    const [items, totalItems] = await this.prisma.$transaction([
+      this.prisma.situationProfessionnelle.findMany({
+        where: pendingWhere,
+        skip,
+        take: limit,
+        // Cette liste sert a l'ecran de validation: on ne charge donc
+        // que les champs affiches dans cette vue.
+        select: this.pendingValidationSelect,
+        orderBy: { [sortBy]: sortOrder },
+      }),
+      this.prisma.situationProfessionnelle.count({ where: pendingWhere }),
+    ]);
+
+    return {
+      items,
+      pagination: buildPaginationMeta(page, limit, totalItems),
+    };
+  }
+
+  private buildSituationsWhere(query: SituationsQueryDto) {
+    const where: Prisma.SituationProfessionnelleWhereInput = {
+      ...(query.apprenantId ? { apprenantId: query.apprenantId } : {}),
+      ...(query.entrepriseId ? { entrepriseId: query.entrepriseId } : {}),
+      ...(query.statut ? { statut: query.statut } : {}),
+      ...(typeof query.valide === 'boolean' ? { valide: query.valide } : {}),
+    };
+
+    if (query.dateDebutFrom || query.dateDebutTo) {
+      where.dateDebut = {
+        ...(query.dateDebutFrom ? { gte: new Date(query.dateDebutFrom) } : {}),
+        ...(query.dateDebutTo ? { lte: new Date(query.dateDebutTo) } : {}),
+      };
+    }
+
+    return where;
   }
 }
