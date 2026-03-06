@@ -15,6 +15,7 @@ import { EntreprisesModule } from './entreprises/entreprises.module';
 import { SituationsModule } from './situations/situations.module';
 import { DocumentsModule } from './documents/documents.module';
 import { StatistiquesModule } from './statistiques/statistiques.module';
+import { CoachesModule } from './coaches/coaches.module';
 
 @Module({
   imports: [
@@ -32,6 +33,7 @@ import { StatistiquesModule } from './statistiques/statistiques.module';
     SituationsModule,
     DocumentsModule,
     StatistiquesModule,
+    CoachesModule,
   ],
   controllers: [AppController],
   providers: [AppService, ReferentielsService],

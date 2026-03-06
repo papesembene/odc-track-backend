@@ -134,12 +134,25 @@ export class StatistiquesService {
       select: { id: true, nom: true, _count: { select: { apprenants: true } } },
     });
     const parPromotion = await Promise.all(
-      promotions.map(async (p) => ({
-        promotionId: p.id,
-        promotionNom: p.nom,
-        total: p._count.apprenants,
-        enEmploi: await this.countEnEmploi({ promotionId: p.id }),
-      })),
+      promotions.map(async (p) => {
+        const enEmploi = await this.countEnEmploi({ promotionId: p.id });
+        const total = p._count.apprenants;
+        // Statut basé sur le taux d'insertion
+        const taux = total > 0 ? (enEmploi / total) * 100 : 0;
+        let statut = 'En cours';
+        if (taux >= 100) {
+          statut = 'Terminée';
+        } else if (taux >= 50) {
+          statut = 'En finale';
+        }
+        return {
+          promotionId: p.id,
+          promotionNom: p.nom,
+          total,
+          enEmploi,
+          statut,
+        };
+      }),
     );
 
     // Stats par référentiel
