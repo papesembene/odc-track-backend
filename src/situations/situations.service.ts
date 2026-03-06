@@ -427,10 +427,14 @@ export class SituationsService {
 
   /**
    * Retourne les situations en attente de validation.
+   * @param promotionId - filtrer par promotion (optionnel)
    */
-  async findPendingValidations() {
+  async findPendingValidations(promotionId?: string) {
     return this.prisma.situationProfessionnelle.findMany({
-      where: { valide: false },
+      where: {
+        valide: false,
+        ...(promotionId ? { apprenant: { promotionId } } : {}),
+      },
       include: {
         apprenant: {
           include: {

@@ -37,7 +37,7 @@ export class EntreprisesController {
   }
 
   @Get()
-  @Roles(ROLE.POLE_EMPLOI)
+  @Roles(ROLE.POLE_EMPLOI, ROLE.APPRENANT)
   async findAll(@Query() query: EntreprisesQueryDto) {
     const data = await this.service.findAll(query);
     return ResponseHelper.success(data);

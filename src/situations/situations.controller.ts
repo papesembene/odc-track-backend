@@ -18,6 +18,7 @@ import { JwtAuthGuard } from 'src/auth/guards/jwt-auth.guard';
 import { RolesGuard } from 'src/auth/guards/roles.guard';
 import { Roles } from 'src/auth/decorators/roles.decorator';
 import { ResponseHelper } from 'src/common/helpers/response.helper';
+import { PromotionsService } from 'src/promotions/promotions.service';
 import { SituationsService } from './situations.service';
 import { CreateSituationDto } from './dto/create-situation.dto';
 import { UpdateSituationDto } from './dto/update-situation.dto';
@@ -27,7 +28,10 @@ import { ValidateSituationDto } from './dto/validate-situation.dto';
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class SituationsController {
-  constructor(private readonly service: SituationsService) {}
+  constructor(
+    private readonly service: SituationsService,
+    private readonly promotionsService: PromotionsService,
+  ) {}
 
   /**
    * Historique des situations de l'apprenant connecté.
@@ -45,7 +49,11 @@ export class SituationsController {
   @Get('/situations/attentes')
   @Roles(ROLE.POLE_EMPLOI, ROLE.MANAGER)
   async findPendingValidations() {
-    const data = await this.service.findPendingValidations();
+    // Filtrer automatiquement par la promotion active pour MANAGER et POLE_EMPLOI
+    const activePromotion = await this.promotionsService.getActive();
+    const data = await this.service.findPendingValidations(
+      activePromotion ? activePromotion.id : undefined,
+    );
     return ResponseHelper.success(data);
   }
   /**

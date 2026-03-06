@@ -14,6 +14,7 @@ import { JwtAuthGuard } from 'src/auth/guards/jwt-auth.guard';
 import { RolesGuard } from 'src/auth/guards/roles.guard';
 import { ResponseHelper } from 'src/common/helpers/response.helper';
 import { CoachesService } from './coaches.service';
+import { CreateCoachDto } from './dto/create-coach.dto';
 
 @Controller('coaches')
 @ApiBearerAuth()
@@ -41,7 +42,7 @@ export class CoachesController {
   @Post()
   @Roles(ROLE.MANAGER, ROLE.ADMIN)
   @HttpCode(HttpStatus.CREATED)
-  async create(@Body() data: { nom: string; prenom: string; email: string }) {
+  async create(@Body() data: CreateCoachDto) {
     const coach = await this.coachesService.create(data);
     return ResponseHelper.success(coach, 'Coach créé avec succès');
   }

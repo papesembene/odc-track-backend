@@ -42,6 +42,17 @@ export class PromotionsController {
     return ResponseHelper.success(data);
   }
 
+  /**
+   * GET /api/v1/promotions/active
+   * Récupère la promotion active (si aucune n'est active, retourne null)
+   * NOTE: Doit être défini AVANT :id pour éviter que "active" soit interprété comme un id
+   */
+  @Get('active')
+  async getActive() {
+    const data = await this.service.getActive();
+    return ResponseHelper.success(data);
+  }
+
   @Get(':id')
   async findOne(@Param('id') id: string) {
     const data = await this.service.findOne(id);
@@ -60,5 +71,16 @@ export class PromotionsController {
   async remove(@Param('id') id: string) {
     const data = await this.service.remove(id);
     return ResponseHelper.success(data);
+  }
+
+  /**
+   * POST /api/v1/promotions/:id/activate
+   * Active une promotion (désactive automatiquement les autres)
+   */
+  @Post(':id/activate')
+  @Roles(ROLE.MANAGER, ROLE.ADMIN)
+  async setActive(@Param('id') id: string) {
+    const data = await this.service.setActive(id);
+    return ResponseHelper.success(data, 'Promotion activée avec succès');
   }
 }

@@ -102,16 +102,26 @@ export class StatistiquesService {
   // ============================================
 
   /** Stats globales */
-  async getGlobales() {
-    const totalApprenants = await this.prisma.apprenant.count();
-    const parStatut = await this.getParStatut({});
-    const enEmploi = await this.countEnEmploi({});
+  async getGlobales(promotionId?: string) {
+    const filter = promotionId ? { promotionId } : {};
+
+    const totalApprenants = promotionId
+      ? await this.prisma.apprenant.count({ where: { promotionId } })
+      : await this.prisma.apprenant.count();
+
+    const parStatut = await this.getParStatut(filter);
+    const enEmploi = await this.countEnEmploi(filter);
     const tauxInsertion = this.calcTaux(totalApprenants, enEmploi);
 
+    // Build filter for situations
+    const situationsWhere = promotionId
+      ? { apprenant: { promotionId } }
+      : {};
+    
     const [totalSituations, enAttente, validees] = await Promise.all([
-      this.prisma.situationProfessionnelle.count(),
-      this.prisma.situationProfessionnelle.count({ where: { valide: false } }),
-      this.prisma.situationProfessionnelle.count({ where: { valide: true } }),
+      this.prisma.situationProfessionnelle.count({ where: situationsWhere }),
+      this.prisma.situationProfessionnelle.count({ where: { ...situationsWhere, valide: false } }),
+      this.prisma.situationProfessionnelle.count({ where: { ...situationsWhere, valide: true } }),
     ]);
 
     const situationsRecentes =

@@ -43,12 +43,14 @@ model Apprenant {
 }
 
 model Coach {
-  id          String   @id @default(uuid())
-  specialite  String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  userId      String   @unique
-  utilisateur User     @relation(fields: [userId], references: [id])
+  id            String     @id @default(uuid())
+  specialite    String?
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+  userId        String     @unique
+  referentielId String
+  utilisateur   User       @relation(fields: [userId], references: [id])
+  referentiel   Referentiel @relation(fields: [referentielId], references: [id])
 }
 
 model Referentiel {
@@ -59,12 +61,14 @@ model Referentiel {
   updatedAt   DateTime               @updatedAt
   apprenants  Apprenant[]
   promotions  PromotionReferentiel[]
+  coaches     Coach[]
 }
 
 model Promotion {
   id           String                 @id @default(uuid())
   nom          String
   annee        Int
+  estActive    Boolean                @default(false)
   createdAt    DateTime               @default(now())
   updatedAt    DateTime               @updatedAt
   apprenants   Apprenant[]

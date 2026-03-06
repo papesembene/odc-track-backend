@@ -23,8 +23,16 @@ async function bootstrap() {
     }),
   );
 
-  // CORS
-  app.enableCors();
+  // CORS: reflete l'origine appelante. Suffisant ici car l'auth passe par
+  // Authorization et non par cookies navigateur.
+  app.enableCors({
+    origin: true,
+    methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
+    allowedHeaders:
+      'Content-Type, Authorization, Accept, Origin, X-Requested-With',
+    credentials: false,
+    optionsSuccessStatus: 204,
+  });
 
   //  exposer uploads/documents en statique.
   app.useStaticAssets(join(process.cwd(), 'uploads'), { prefix: '/uploads/' });

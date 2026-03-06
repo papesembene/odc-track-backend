@@ -5,6 +5,7 @@ import { Roles } from 'src/auth/decorators/roles.decorator';
 import { JwtAuthGuard } from 'src/auth/guards/jwt-auth.guard';
 import { RolesGuard } from 'src/auth/guards/roles.guard';
 import { ResponseHelper } from 'src/common/helpers/response.helper';
+import { PromotionsService } from 'src/promotions/promotions.service';
 import { StatistiquesPeriodeQueryDto } from './dto/statistiques-periode-query.dto';
 import { StatistiquesService } from './statistiques.service';
 
@@ -12,7 +13,10 @@ import { StatistiquesService } from './statistiques.service';
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class StatistiquesController {
-  constructor(private readonly service: StatistiquesService) {}
+  constructor(
+    private readonly service: StatistiquesService,
+    private readonly promotionsService: PromotionsService,
+  ) {}
 
   /**
    * Statistiques globales (ADMIN, POLE_EMPLOI, MANAGER).
@@ -20,7 +24,11 @@ export class StatistiquesController {
   @Get('globales')
   @Roles(ROLE.POLE_EMPLOI, ROLE.MANAGER)
   async globales() {
-    const data = await this.service.getGlobales();
+    // Filtrer automatiquement par la promotion active pour MANAGER et POLE_EMPLOI
+    const activePromotion = await this.promotionsService.getActive();
+    const data = await this.service.getGlobales(
+      activePromotion ? activePromotion.id : undefined,
+    );
     return ResponseHelper.success(data);
   }
 

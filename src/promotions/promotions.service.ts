@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { CreatePromotionDto } from './dto/create-promotion.dto';
@@ -12,6 +12,8 @@ import {
 
 @Injectable()
 export class PromotionsService {
+  private readonly logger = new Logger(PromotionsService.name);
+
   constructor(private readonly prisma: PrismaService) {}
 
   async create(dto: CreatePromotionDto) {
@@ -138,5 +140,94 @@ export class PromotionsService {
     });
 
     return { message: 'Promotion supprimée avec succès' };
+  }
+
+  /**
+   * Active une promotion et désactive automatiquement toutes les autres
+   * (une seule promotion peut être active à la fois)
+   */
+  async setActive(id: string) {
+    // Vérifier que la promotion existe
+    await this.findOne(id);
+
+    // Utiliser une transaction pour:
+    // 1. Désactiver toutes les promotions
+    // 2. Activer la promotion sélectionnée
+    const result = await this.prisma.$transaction(async (tx) => {
+      // Désactiver toutes les promotions
+      await tx.promotion.updateMany({
+        where: { estActive: true },
+        data: { estActive: false },
+      });
+
+      // Activer la promotion sélectionnée
+      const updated = await tx.promotion.update({
+        where: { id },
+        data: { estActive: true },
+        include: {
+          referentiels: {
+            include: {
+              referentiel: true,
+            },
+          },
+        },
+      });
+
+      return updated;
+    });
+
+    return result;
+  }
+
+  /**
+   * Récupère la promotion active (si aucune n'est active, retourne null)
+   */
+  async getActive() {
+    try {
+      return await this.prisma.promotion.findFirst({
+        where: { estActive: true },
+        include: {
+          referentiels: {
+            include: {
+              referentiel: true,
+            },
+          },
+        },
+      });
+    } catch (error) {
+      if (!this.isMissingEstActiveColumnError(error)) {
+        throw error;
+      }
+
+      this.logger.warn(
+        'Le champ Promotion.estActive semble absent en base. Fallback sur la promotion la plus recente.',
+      );
+
+      return this.prisma.promotion.findFirst({
+        orderBy: [{ annee: 'desc' }, { createdAt: 'desc' }],
+        include: {
+          referentiels: {
+            include: {
+              referentiel: true,
+            },
+          },
+        },
+      });
+    }
+  }
+
+  private isMissingEstActiveColumnError(error: unknown): boolean {
+    if (!(error instanceof Error)) {
+      return false;
+    }
+
+    const message = error.message.toLowerCase();
+    return (
+      message.includes('estactive') &&
+      (message.includes('does not exist') ||
+        message.includes('unknown arg') ||
+        message.includes('column') ||
+        message.includes('unknown field'))
+    );
   }
 }
