@@ -20,6 +20,8 @@ model User {
   updatedAt  DateTime   @updatedAt
   apprenant  Apprenant?
   coach      Coach?
+
+  @@index([role, createdAt])
 }
 
 model Apprenant {
@@ -40,6 +42,9 @@ model Apprenant {
   user                  User                       @relation(fields: [userId], references: [id])
   documents             Document[]
   situations            SituationProfessionnelle[]
+
+  @@index([promotionId, createdAt])
+  @@index([referentielId, createdAt])
 }
 
 model Coach {
@@ -51,6 +56,8 @@ model Coach {
   referentielId String
   referentiel   Referentiel @relation(fields: [referentielId], references: [id])
   utilisateur   User        @relation(fields: [userId], references: [id])
+
+  @@index([referentielId])
 }
 
 model Referentiel {
@@ -73,6 +80,8 @@ model Promotion {
   estActive    Boolean                @default(false)
   apprenants   Apprenant[]
   referentiels PromotionReferentiel[]
+
+  @@index([estActive])
 }
 
 model PromotionReferentiel {
@@ -102,6 +111,10 @@ model SituationProfessionnelle {
   documents              Document[]
   apprenant              Apprenant   @relation(fields: [apprenantId], references: [id])
   entreprise             Entreprise? @relation(fields: [entrepriseId], references: [id])
+
+  @@index([apprenantId, dateDebut])
+  @@index([valide, createdAt])
+  @@index([statut, apprenantId])
 }
 
 model Entreprise {
@@ -127,6 +140,9 @@ model Document {
   situationId String?
   apprenant   Apprenant                 @relation(fields: [apprenantId], references: [id])
   situation   SituationProfessionnelle? @relation(fields: [situationId], references: [id])
+
+  @@index([apprenantId, createdAt])
+  @@index([situationId, createdAt])
 }
 
 enum ROLE {
