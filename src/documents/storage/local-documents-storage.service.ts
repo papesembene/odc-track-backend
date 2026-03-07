@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { mkdir, writeFile } from 'fs/promises';
+import { mkdir, rm, writeFile } from 'fs/promises';
 import { extname } from 'path';
 import { randomUUID } from 'crypto';
 
@@ -22,6 +22,16 @@ export class LocalDocumentsStorageService {
 
     await writeFile(filePath, file.buffer);
     return filePath;
+  }
+
+  /**
+   * Supprime un fichier du stockage local.
+   * La suppression est silencieuse si le fichier n'existe plus.
+   */
+  async remove(filePath: string): Promise<void> {
+    if (!filePath) return;
+    if (!filePath.startsWith(`${this.uploadDir}/`)) return;
+    await rm(filePath, { force: true });
   }
 
   /**
