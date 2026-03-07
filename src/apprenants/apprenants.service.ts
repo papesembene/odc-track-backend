@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  Inject,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -18,10 +19,18 @@ import {
   buildPaginationMeta,
   normalizePagination,
 } from 'src/common/helpers/pagination.helper';
+import {
+  DOCUMENTS_STORAGE,
+} from 'src/common/storage/documents-storage.interface';
+import type { DocumentsStorageService } from 'src/common/storage/documents-storage.interface';
 
 @Injectable()
 export class ApprenantsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @Inject(DOCUMENTS_STORAGE)
+    private readonly documentsStorage: DocumentsStorageService,
+  ) {}
 
   async create(dto: CreateApprenantDto) {
     const user = await this.prisma.user.findUnique({
@@ -242,7 +251,9 @@ export class ApprenantsService {
 
     return {
       ...apprenant,
-      cvDocument,
+      cvDocument: cvDocument
+        ? await this.resolveDocumentSummary(cvDocument)
+        : cvDocument,
     };
   }
 
@@ -366,7 +377,18 @@ export class ApprenantsService {
 
     return {
       ...apprenant,
-      cvDocument,
+      cvDocument: cvDocument
+        ? await this.resolveDocumentSummary(cvDocument)
+        : cvDocument,
+    };
+  }
+
+  private async resolveDocumentSummary<T extends { fichier: string }>(
+    document: T,
+  ): Promise<T> {
+    return {
+      ...document,
+      fichier: await this.documentsStorage.resolveAccessPath(document.fichier),
     };
   }
 

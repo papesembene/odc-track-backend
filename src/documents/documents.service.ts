@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   ForbiddenException,
+  Inject,
   InternalServerErrorException,
   Injectable,
   Logger,
@@ -16,8 +17,11 @@ import {
   APPRENANTS_ERRORS,
   DOCUMENTS_ERRORS,
 } from 'src/common/constants/error-messages.constant';
+import {
+  DOCUMENTS_STORAGE,
+} from 'src/common/storage/documents-storage.interface';
+import type { DocumentsStorageService } from 'src/common/storage/documents-storage.interface';
 import { PrismaService } from 'src/prisma/prisma.service';
-import { LocalDocumentsStorageService } from './storage/local-documents-storage.service';
 import { DocumentsQueryDto } from './dto/documents-query.dto';
 import { CreateDocumentDto } from './dto/create-document.dto';
 
@@ -27,7 +31,8 @@ export class DocumentsService {
 
   constructor(
     private readonly prisma: PrismaService,
-    private readonly storage: LocalDocumentsStorageService,
+    @Inject(DOCUMENTS_STORAGE)
+    private readonly storage: DocumentsStorageService,
   ) {}
 
   private readonly documentListSelect = {
@@ -76,7 +81,7 @@ export class DocumentsService {
     ]);
 
     return {
-      items,
+      items: await this.resolveDocumentCollection(items),
       pagination: buildPaginationMeta(page, limit, totalItems),
     };
   }
@@ -92,7 +97,7 @@ export class DocumentsService {
       requesterRole,
     );
 
-    return document;
+    return this.resolveDocumentAccess(document);
   }
 
   /**
@@ -132,9 +137,13 @@ export class DocumentsService {
       );
     }
 
-    const storedPath = await this.storage.save(file);
+    const storedPath = await this.storage.save(file, {
+      apprenantId: apprenant.id,
+      situationId: situation.id,
+      documentType: dto.type,
+    });
 
-    return this.prisma.document.create({
+    const createdDocument = await this.prisma.document.create({
       data: {
         apprenantId: apprenant.id,
         situationId: situation.id,
@@ -142,6 +151,8 @@ export class DocumentsService {
         fichier: storedPath,
       },
     });
+
+    return this.resolveDocumentAccess(createdDocument);
   }
 
   /**
@@ -155,7 +166,10 @@ export class DocumentsService {
     let replacedPath: string | undefined;
 
     try {
-      storedPath = await this.storage.save(file);
+      storedPath = await this.storage.save(file, {
+        apprenantId: apprenant.id,
+        documentType: DOCTYPE.CV,
+      });
       const existingCv = await this.getLatestCv(apprenant.id);
 
       if (existingCv) {
@@ -182,10 +196,10 @@ export class DocumentsService {
           });
         }
 
-        return updated;
+        return this.resolveDocumentAccess(updated);
       }
 
-      return this.prisma.document.create({
+      const createdDocument = await this.prisma.document.create({
         data: {
           apprenantId: apprenant.id,
           type: DOCTYPE.CV,
@@ -194,6 +208,8 @@ export class DocumentsService {
         },
         select: this.documentListSelect,
       });
+
+      return this.resolveDocumentAccess(createdDocument);
     } catch (error) {
       // Si l'écriture DB échoue, on nettoie le nouveau fichier pour éviter
       // d'accumuler des fichiers orphelins sur le disque.
@@ -221,7 +237,8 @@ export class DocumentsService {
     requesterRole: ROLE,
   ) {
     await this.ensureReadAccess(apprenantId, requesterUserId, requesterRole);
-    return this.getLatestCv(apprenantId);
+    const cvDocument = await this.getLatestCv(apprenantId);
+    return cvDocument ? this.resolveDocumentAccess(cvDocument) : null;
   }
 
   /**
@@ -245,11 +262,13 @@ export class DocumentsService {
     const staffRoles: ROLE[] = [ROLE.POLE_EMPLOI, ROLE.MANAGER, ROLE.COACH];
 
     if (staffRoles.includes(requesterRole)) {
-      return this.prisma.document.findMany({
+      const documents = await this.prisma.document.findMany({
         where: { situationId },
         select: this.documentListSelect,
         orderBy: { createdAt: 'desc' },
       });
+
+      return this.resolveDocumentCollection(documents);
     }
 
     if (requesterRole === ROLE.APPRENANT) {
@@ -258,11 +277,13 @@ export class DocumentsService {
         throw new ForbiddenException(DOCUMENTS_ERRORS.FORBIDDEN.message);
       }
 
-      return this.prisma.document.findMany({
+      const documents = await this.prisma.document.findMany({
         where: { situationId },
         select: this.documentListSelect,
         orderBy: { createdAt: 'desc' },
       });
+
+      return this.resolveDocumentCollection(documents);
     }
 
     throw new ForbiddenException(DOCUMENTS_ERRORS.FORBIDDEN.message);
@@ -380,6 +401,27 @@ export class DocumentsService {
   }
 
   /**
+   * Traduit la clé ou le chemin stocké en URL d'accès exploitable par le frontend.
+   * En local, on obtient /uploads/..., en bucket privé on obtient une URL signée.
+   */
+  private async resolveDocumentAccess<T extends { fichier: string }>(
+    document: T,
+  ): Promise<T> {
+    return {
+      ...document,
+      fichier: await this.storage.resolveAccessPath(document.fichier),
+    };
+  }
+
+  private async resolveDocumentCollection<T extends { fichier: string }>(
+    documents: T[],
+  ): Promise<T[]> {
+    return Promise.all(
+      documents.map((document) => this.resolveDocumentAccess(document)),
+    );
+  }
+
+  /**
    * Valide le fichier uploadé:
    * - présence obligatoire
    * - taille maximale 10 Mo
@@ -470,7 +512,7 @@ export class DocumentsService {
         msg.includes('enospc')
       ) {
         throw new InternalServerErrorException(
-          'Stockage local indisponible pour enregistrer le fichier',
+          'Le stockage de documents est indisponible pour enregistrer le fichier',
         );
       }
       this.logger.error(
