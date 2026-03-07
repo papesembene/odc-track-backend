@@ -29,7 +29,7 @@ export class ReferentielsController {
   constructor(private readonly service: ReferentielsService) {}
 
   @Post()
-  @Roles(ROLE.ADMIN)
+  @Roles(ROLE.ADMIN, ROLE.MANAGER)
   @HttpCode(HttpStatus.CREATED)
   async create(@Body() dto: CreateReferentielDto) {
     const data = await this.service.create(dto);
@@ -49,14 +49,14 @@ export class ReferentielsController {
   }
 
   @Put(':id')
-  @Roles(ROLE.ADMIN)
+  @Roles(ROLE.ADMIN, ROLE.MANAGER)
   async update(@Param('id') id: string, @Body() dto: UpdateReferentielDto) {
     const data = await this.service.update(id, dto);
     return ResponseHelper.success(data, 'Référentiel modifié avec succès');
   }
 
   @Delete(':id')
-  @Roles(ROLE.ADMIN)
+  @Roles(ROLE.ADMIN, ROLE.MANAGER)
   async remove(@Param('id') id: string) {
     const data = await this.service.remove(id);
     return ResponseHelper.success(data);
