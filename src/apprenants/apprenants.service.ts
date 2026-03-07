@@ -5,6 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { DOCTYPE, Prisma, ROLE } from '@prisma/client';
+import { Workbook } from 'exceljs';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { ApprenantsQueryDto } from './dto/apprenants-query.dto';
 import { CreateApprenantDto } from './dto/create-apprenant.dto';
@@ -102,49 +103,7 @@ export class ApprenantsService {
     const sortBy = query.sortBy ?? 'createdAt';
     const sortOrder = query.sortOrder ?? 'desc';
 
-    const where: Prisma.ApprenantWhereInput = {
-      ...(query.referentielId ? { referentielId: query.referentielId } : {}),
-      ...(query.promotionId ? { promotionId: query.promotionId } : {}),
-      ...(query.genre
-        ? { genre: { equals: query.genre, mode: 'insensitive' } }
-        : {}),
-      ...(typeof query.actif === 'boolean'
-        ? {
-            user: {
-              is: {
-                actif: query.actif,
-              },
-            },
-          }
-        : {}),
-      ...(query.search
-        ? {
-            OR: [
-              {
-                user: {
-                  is: { nom: { contains: query.search, mode: 'insensitive' } },
-                },
-              },
-              {
-                user: {
-                  is: {
-                    prenom: { contains: query.search, mode: 'insensitive' },
-                  },
-                },
-              },
-              {
-                user: {
-                  is: {
-                    email: { contains: query.search, mode: 'insensitive' },
-                  },
-                },
-              },
-              { adresse: { contains: query.search, mode: 'insensitive' } },
-              { telephone: { contains: query.search, mode: 'insensitive' } },
-            ],
-          }
-        : {}),
-    };
+    const where = this.buildApprenantsWhere(query);
 
     const [items, totalItems] = await this.prisma.$transaction([
       this.prisma.apprenant.findMany({
@@ -187,6 +146,80 @@ export class ApprenantsService {
     return {
       items,
       pagination: buildPaginationMeta(page, limit, totalItems),
+    };
+  }
+
+  /**
+   * Génère un export XLSX des apprenants visibles dans le périmètre courant.
+   * On n'affiche Odc@1234 que pour les comptes encore marqués comme temporaires.
+   */
+  async exportXlsx(query: ApprenantsQueryDto) {
+    const where = this.buildApprenantsWhere(query);
+
+    const apprenants = await this.prisma.apprenant.findMany({
+      where,
+      orderBy: { createdAt: 'desc' },
+      select: {
+        telephone: true,
+        motDePasseTemporaire: true,
+        user: {
+          select: {
+            nom: true,
+            prenom: true,
+            email: true,
+            actif: true,
+          },
+        },
+        promotion: {
+          select: {
+            nom: true,
+            annee: true,
+          },
+        },
+        referentiel: {
+          select: {
+            nom: true,
+          },
+        },
+      },
+    });
+
+    const workbook = new Workbook();
+    const worksheet = workbook.addWorksheet('Apprenants');
+
+    worksheet.columns = [
+      { header: 'Nom', key: 'nom', width: 22 },
+      { header: 'Prénom', key: 'prenom', width: 22 },
+      { header: 'Email', key: 'email', width: 30 },
+      { header: 'Référentiel', key: 'referentiel', width: 24 },
+      { header: 'Mot de passe par défaut', key: 'motDePasse', width: 28 },
+    ];
+
+    worksheet.getRow(1).font = { bold: true };
+    worksheet.getRow(1).fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FFF3F4F6' },
+    };
+
+    apprenants.forEach((apprenant) => {
+      worksheet.addRow({
+        nom: apprenant.user.nom,
+        prenom: apprenant.user.prenom,
+        email: apprenant.user.email,
+        referentiel: apprenant.referentiel.nom,
+        // Le metier demande ici d'exporter systematiquement le mot de passe
+        // temporaire par defaut communique aux apprenants.
+        motDePasse: 'Odc@1234',
+      });
+    });
+
+    const fileName = `apprenants-${new Date().toISOString().slice(0, 10)}.xlsx`;
+    const buffer = await workbook.xlsx.writeBuffer();
+
+    return {
+      fileName,
+      buffer,
     };
   }
 
@@ -389,6 +422,54 @@ export class ApprenantsService {
     return {
       ...document,
       fichier: await this.documentsStorage.resolveAccessPath(document.fichier),
+    };
+  }
+
+  private buildApprenantsWhere(
+    query: ApprenantsQueryDto,
+  ): Prisma.ApprenantWhereInput {
+    return {
+      ...(query.referentielId ? { referentielId: query.referentielId } : {}),
+      ...(query.promotionId ? { promotionId: query.promotionId } : {}),
+      ...(query.genre
+        ? { genre: { equals: query.genre, mode: 'insensitive' } }
+        : {}),
+      ...(typeof query.actif === 'boolean'
+        ? {
+            user: {
+              is: {
+                actif: query.actif,
+              },
+            },
+          }
+        : {}),
+      ...(query.search
+        ? {
+            OR: [
+              {
+                user: {
+                  is: { nom: { contains: query.search, mode: 'insensitive' } },
+                },
+              },
+              {
+                user: {
+                  is: {
+                    prenom: { contains: query.search, mode: 'insensitive' },
+                  },
+                },
+              },
+              {
+                user: {
+                  is: {
+                    email: { contains: query.search, mode: 'insensitive' },
+                  },
+                },
+              },
+              { adresse: { contains: query.search, mode: 'insensitive' } },
+              { telephone: { contains: query.search, mode: 'insensitive' } },
+            ],
+          }
+        : {}),
     };
   }
 

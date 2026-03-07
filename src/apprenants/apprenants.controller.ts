@@ -10,10 +10,11 @@ import {
   Put,
   Query,
   Req,
+  Res,
   UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth } from '@nestjs/swagger';
-import type { Request } from 'express';
+import type { Request, Response } from 'express';
 import { ROLE } from '@prisma/client';
 import { Roles } from 'src/auth/decorators/roles.decorator';
 import { JwtAuthGuard } from 'src/auth/guards/jwt-auth.guard';
@@ -53,6 +54,29 @@ export class ApprenantsController {
 
     const data = await this.service.findAll(query);
     return ResponseHelper.success(data);
+  }
+
+  @Get('export/xlsx')
+  @Roles(ROLE.POLE_EMPLOI, ROLE.MANAGER)
+  async exportXlsx(
+    @Query() query: ApprenantsQueryDto,
+    @Res() res: Response,
+  ) {
+    const activePromotion = await this.promotionsService.getActive();
+    if (activePromotion) {
+      query.promotionId = activePromotion.id;
+    }
+
+    const file = await this.service.exportXlsx(query);
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    );
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="${file.fileName}"`,
+    );
+    res.send(file.buffer);
   }
 
   @Get('me')
