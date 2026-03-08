@@ -284,47 +284,9 @@ export class StatistiquesService {
             },
           })
         : Promise.resolve([]),
-<<<<<<< Updated upstream
-      includePromotions
-        ? this.prisma.promotion.findMany({
-            select: {
-              id: true,
-              nom: true,
-              _count: { select: { apprenants: true } },
-            },
-          })
-        : Promise.resolve([]),
-      includeReferentiels
-        ? this.prisma.referentiel.findMany({
-            select: {
-              id: true,
-              nom: true,
-              _count: { select: { apprenants: true } },
-            },
-          })
-        : Promise.resolve([]),
-      includePromotions || includeReferentiels
-        ? this.prisma.situationProfessionnelle.findMany({
-            where: {
-              statut: 'EN_EMPLOI',
-              ...(promotionId ? { apprenant: { promotionId } } : {}),
-            },
-            distinct: ['apprenantId'],
-            select: {
-              apprenant: {
-                select: {
-                  promotionId: true,
-                  referentielId: true,
-                },
-              },
-            },
-          })
-        : Promise.resolve([]),
-=======
       promotionsPromise,
       referentielsPromise,
       emploisDistinctsPromise,
->>>>>>> Stashed changes
     ]);
 
     const tauxInsertion = this.calcTaux(totalApprenants, enEmploi);
