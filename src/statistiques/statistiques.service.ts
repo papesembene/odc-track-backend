@@ -13,6 +13,33 @@ import { CacheVersionService } from 'src/common/services/cache-version.service';
 import { StatistiquesGlobalesQueryDto } from './dto/statistiques-globales-query.dto';
 import { StatistiquesPeriodeQueryDto } from './dto/statistiques-periode-query.dto';
 
+type PromotionStatsRow = Prisma.PromotionGetPayload<{
+  select: {
+    id: true;
+    nom: true;
+    _count: { select: { apprenants: true } };
+  };
+}>;
+
+type ReferentielStatsRow = Prisma.ReferentielGetPayload<{
+  select: {
+    id: true;
+    nom: true;
+    _count: { select: { apprenants: true } };
+  };
+}>;
+
+type EmploiDistinctRow = Prisma.SituationProfessionnelleGetPayload<{
+  select: {
+    apprenant: {
+      select: {
+        promotionId: true;
+        referentielId: true;
+      };
+    };
+  };
+}>;
+
 @Injectable()
 export class StatistiquesService {
   // Cache tres court pour eviter de recalculer les memes statistiques
@@ -169,6 +196,53 @@ export class StatistiquesService {
     const includeReferentiels = options.includeReferentiels !== false;
     const includeSituationsRecentes =
       options.includeSituationsRecentes !== false;
+    const promotionsPromise: Promise<PromotionStatsRow[]> = includePromotions
+      ? this.prisma.promotion.findMany({
+          ...(promotionId ? { where: { id: promotionId } } : {}),
+          select: {
+            id: true,
+            nom: true,
+            _count: { select: { apprenants: true } },
+          },
+        })
+      : Promise.resolve([]);
+    const referentielsPromise: Promise<ReferentielStatsRow[]> =
+      includeReferentiels
+        ? this.prisma.referentiel.findMany({
+            ...(promotionId
+              ? { where: { apprenants: { some: { promotionId } } } }
+              : {}),
+            select: {
+              id: true,
+              nom: true,
+              _count: {
+                select: {
+                  apprenants: promotionId
+                    ? { where: { promotionId } }
+                    : true,
+                },
+              },
+            },
+          })
+        : Promise.resolve([]);
+    const emploisDistinctsPromise: Promise<EmploiDistinctRow[]> =
+      includePromotions || includeReferentiels
+        ? this.prisma.situationProfessionnelle.findMany({
+            where: {
+              statut: 'EN_EMPLOI',
+              ...(promotionId ? { apprenant: { promotionId } } : {}),
+            },
+            distinct: ['apprenantId'],
+            select: {
+              apprenant: {
+                select: {
+                  promotionId: true,
+                  referentielId: true,
+                },
+              },
+            },
+          })
+        : Promise.resolve([]);
 
     const [
       totalApprenants,
@@ -255,6 +329,10 @@ export class StatistiquesService {
             },
           })
         : Promise.resolve([]),
+
+      promotionsPromise,
+      referentielsPromise,
+      emploisDistinctsPromise,
     ]);
 
     const tauxInsertion = this.calcTaux(totalApprenants, enEmploi);
