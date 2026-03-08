@@ -25,10 +25,11 @@ export class StatistiquesController {
   @Get('globales')
   @Roles(ROLE.POLE_EMPLOI, ROLE.MANAGER)
   async globales(@Query() query: StatistiquesGlobalesQueryDto) {
-    // Filtrer automatiquement par la promotion active pour MANAGER et POLE_EMPLOI
+    // Par defaut, le backoffice travaille sur la promotion active.
+    // Si le frontend transmet explicitement une promotion, on respecte ce choix.
     const activePromotion = await this.promotionsService.getActive();
     const data = await this.service.getGlobales(
-      activePromotion ? activePromotion.id : undefined,
+      query.promotionId ?? (activePromotion ? activePromotion.id : undefined),
       query,
     );
     return ResponseHelper.success(data);

@@ -46,8 +46,13 @@ export class AuthService {
     const user = await this.findActiveUserByemail(loginDto.email);
     await this.validatePassword(loginDto.password, user.motDePasse);
     const tokens = await this.generateTokens(user.id, user.email, user.role);
+    const mustChangePassword = await this.getMustChangePassword(
+      user.id,
+      user.role,
+    );
     return {
       ...tokens,
+      mustChangePassword,
       user: this.formatUserResponse(user),
     };
   }
@@ -137,6 +142,22 @@ export class AuthService {
         },
       });
     }
+  }
+
+  private async getMustChangePassword(
+    userId: string,
+    role: ROLE,
+  ): Promise<boolean> {
+    if (role !== ROLE.APPRENANT) {
+      return false;
+    }
+
+    const apprenant = await this.prisma.apprenant.findUnique({
+      where: { userId },
+      select: { motDePasseTemporaire: true },
+    });
+
+    return Boolean(apprenant?.motDePasseTemporaire);
   }
 
   private formatUserResponse(user: AuthUser) {

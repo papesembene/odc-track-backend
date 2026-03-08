@@ -29,7 +29,7 @@ export class PromotionsController {
   constructor(private readonly service: PromotionsService) {}
 
   @Post()
-  @Roles(ROLE.ADMIN)
+  @Roles(ROLE.ADMIN, ROLE.MANAGER)
   @HttpCode(HttpStatus.CREATED)
   async create(@Body() dto: CreatePromotionDto) {
     const data = await this.service.create(dto);
@@ -60,14 +60,14 @@ export class PromotionsController {
   }
 
   @Put(':id')
-  @Roles(ROLE.ADMIN)
+  @Roles(ROLE.ADMIN, ROLE.MANAGER)
   async update(@Param('id') id: string, @Body() dto: UpdatePromotionDto) {
     const data = await this.service.update(id, dto);
     return ResponseHelper.success(data, 'Promotion modifiée avec succès');
   }
 
   @Delete(':id')
-  @Roles(ROLE.ADMIN)
+  @Roles(ROLE.ADMIN, ROLE.MANAGER)
   async remove(@Param('id') id: string) {
     const data = await this.service.remove(id);
     return ResponseHelper.success(data);

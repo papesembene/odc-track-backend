@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   ForbiddenException,
+  Inject,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -15,10 +16,16 @@ import {
   buildPaginationMeta,
   normalizePagination,
 } from 'src/common/helpers/pagination.helper';
+import { DOCUMENTS_STORAGE } from 'src/common/storage/documents-storage.interface';
+import type { DocumentsStorageService } from 'src/common/storage/documents-storage.interface';
 
 @Injectable()
 export class SituationsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @Inject(DOCUMENTS_STORAGE)
+    private readonly documentsStorage: DocumentsStorageService,
+  ) {}
 
   private readonly userIdentitySelect = {
     id: true,
@@ -172,7 +179,16 @@ export class SituationsService {
     ]);
 
     return {
-      items,
+      items: await Promise.all(
+        items.map(async (situation) => ({
+          ...situation,
+          documents: await Promise.all(
+            situation.documents.map((document) =>
+              this.resolveDocumentSummary(document),
+            ),
+          ),
+        })),
+      ),
       pagination: buildPaginationMeta(page, limit, totalItems),
     };
   }
@@ -568,5 +584,14 @@ export class SituationsService {
     }
 
     return where;
+  }
+
+  private async resolveDocumentSummary<T extends { fichier: string }>(
+    document: T,
+  ): Promise<T> {
+    return {
+      ...document,
+      fichier: await this.documentsStorage.resolveAccessPath(document.fichier),
+    };
   }
 }

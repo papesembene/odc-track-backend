@@ -1,6 +1,7 @@
 import {
   ConflictException,
   ForbiddenException,
+  Inject,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -16,10 +17,16 @@ import {
   buildPaginationMeta,
   normalizePagination,
 } from 'src/common/helpers/pagination.helper';
+import { DOCUMENTS_STORAGE } from 'src/common/storage/documents-storage.interface';
+import type { DocumentsStorageService } from 'src/common/storage/documents-storage.interface';
 
 @Injectable()
 export class CoachesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @Inject(DOCUMENTS_STORAGE)
+    private readonly documentsStorage: DocumentsStorageService,
+  ) {}
 
   private readonly coachScopedApprenantSelect = {
     id: true,
@@ -132,9 +139,12 @@ export class CoachesService {
       orderBy: [{ annee: 'desc' }, { nom: 'asc' }],
     });
 
-    let selectedPromotion = null as
-      | { id: string; nom: string; annee: number; estActive: boolean }
-      | null;
+    let selectedPromotion = null as {
+      id: string;
+      nom: string;
+      annee: number;
+      estActive: boolean;
+    } | null;
 
     if (promotionId) {
       selectedPromotion =
@@ -429,9 +439,23 @@ export class CoachesService {
       orderBy: { updatedAt: 'desc' },
     });
 
+    const situations = await Promise.all(
+      apprenant.situations.map(async (situation) => ({
+        ...situation,
+        documents: await Promise.all(
+          situation.documents.map((document) =>
+            this.resolveDocumentSummary(document),
+          ),
+        ),
+      })),
+    );
+
     return {
       ...apprenant,
-      cvDocument,
+      situations,
+      cvDocument: cvDocument
+        ? await this.resolveDocumentSummary(cvDocument)
+        : cvDocument,
       scope,
     };
   }
@@ -617,6 +641,18 @@ export class CoachesService {
           ? 0
           : Number(((enEmploi / totalApprenants) * 100).toFixed(2)),
       parStatut,
+    };
+  }
+
+  /**
+   * Résout un chemin/clé de document en URL d'accès selon le driver actif.
+   */
+  private async resolveDocumentSummary<T extends { fichier: string }>(
+    document: T,
+  ): Promise<T> {
+    return {
+      ...document,
+      fichier: await this.documentsStorage.resolveAccessPath(document.fichier),
     };
   }
 }

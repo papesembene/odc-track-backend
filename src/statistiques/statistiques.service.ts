@@ -217,9 +217,7 @@ export class StatistiquesService {
               nom: true,
               _count: {
                 select: {
-                  apprenants: promotionId
-                    ? { where: { promotionId } }
-                    : true,
+                  apprenants: promotionId ? { where: { promotionId } } : true,
                 },
               },
             },
