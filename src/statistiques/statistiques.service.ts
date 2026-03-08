@@ -217,9 +217,7 @@ export class StatistiquesService {
               nom: true,
               _count: {
                 select: {
-                  apprenants: promotionId
-                    ? { where: { promotionId } }
-                    : true,
+                  apprenants: promotionId ? { where: { promotionId } } : true,
                 },
               },
             },
@@ -284,52 +282,6 @@ export class StatistiquesService {
             },
           })
         : Promise.resolve([]),
-      includePromotions
-        ? this.prisma.promotion.findMany({
-            ...(promotionId ? { where: { id: promotionId } } : {}),
-            select: {
-              id: true,
-              nom: true,
-              _count: { select: { apprenants: true } },
-            },
-          })
-        : Promise.resolve([]),
-      includeReferentiels
-        ? this.prisma.referentiel.findMany({
-            ...(promotionId
-              ? { where: { apprenants: { some: { promotionId } } } }
-              : {}),
-            select: {
-              id: true,
-              nom: true,
-              _count: {
-                select: {
-                  apprenants: promotionId
-                    ? { where: { promotionId } }
-                    : true,
-                },
-              },
-            },
-          })
-        : Promise.resolve([]),
-      includePromotions || includeReferentiels
-        ? this.prisma.situationProfessionnelle.findMany({
-            where: {
-              statut: 'EN_EMPLOI',
-              ...(promotionId ? { apprenant: { promotionId } } : {}),
-            },
-            distinct: ['apprenantId'],
-            select: {
-              apprenant: {
-                select: {
-                  promotionId: true,
-                  referentielId: true,
-                },
-              },
-            },
-          })
-        : Promise.resolve([]),
-
       promotionsPromise,
       referentielsPromise,
       emploisDistinctsPromise,
