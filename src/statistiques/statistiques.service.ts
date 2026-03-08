@@ -9,11 +9,52 @@ import {
   PROMOTIONS_ERRORS,
   REFERENTIELS_ERRORS,
 } from 'src/common/constants/error-messages.constant';
+import { CacheVersionService } from 'src/common/services/cache-version.service';
+import { StatistiquesGlobalesQueryDto } from './dto/statistiques-globales-query.dto';
 import { StatistiquesPeriodeQueryDto } from './dto/statistiques-periode-query.dto';
+
+type PromotionStatsRow = Prisma.PromotionGetPayload<{
+  select: {
+    id: true;
+    nom: true;
+    _count: { select: { apprenants: true } };
+  };
+}>;
+
+type ReferentielStatsRow = Prisma.ReferentielGetPayload<{
+  select: {
+    id: true;
+    nom: true;
+    _count: { select: { apprenants: true } };
+  };
+}>;
+
+type EmploiDistinctRow = Prisma.SituationProfessionnelleGetPayload<{
+  select: {
+    apprenant: {
+      select: {
+        promotionId: true;
+        referentielId: true;
+      };
+    };
+  };
+}>;
 
 @Injectable()
 export class StatistiquesService {
-  constructor(private readonly prisma: PrismaService) {}
+  // Cache tres court pour eviter de recalculer les memes statistiques
+  // a chaque navigation sur les pages manager/pole emploi.
+  private readonly globalStatsCache = new Map<
+    string,
+    { expiresAt: number; data: unknown }
+  >();
+
+  private readonly globalStatsCacheTtlMs = 15_000;
+
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly cacheVersionService: CacheVersionService,
+  ) {}
 
   // ============================================
   // OUTILS PRIVÉS
@@ -97,65 +138,211 @@ export class StatistiquesService {
     return parStatut;
   }
 
+  private buildGlobalStatsCacheKey(
+    promotionId: string | undefined,
+    options: StatistiquesGlobalesQueryDto,
+  ) {
+    return JSON.stringify({
+      version: this.cacheVersionService.getVersion('global-stats'),
+      promotionId: promotionId ?? null,
+      includePromotions: options.includePromotions !== false,
+      includeReferentiels: options.includeReferentiels !== false,
+      includeSituationsRecentes: options.includeSituationsRecentes !== false,
+    });
+  }
+
+  private getCachedGlobalStats(cacheKey: string) {
+    const cachedEntry = this.globalStatsCache.get(cacheKey);
+
+    if (!cachedEntry) {
+      return null;
+    }
+
+    if (cachedEntry.expiresAt <= Date.now()) {
+      this.globalStatsCache.delete(cacheKey);
+      return null;
+    }
+
+    return cachedEntry.data;
+  }
+
+  private setCachedGlobalStats(cacheKey: string, data: unknown) {
+    this.globalStatsCache.set(cacheKey, {
+      data,
+      expiresAt: Date.now() + this.globalStatsCacheTtlMs,
+    });
+  }
+
   // ============================================
   // ENDPOINTS
   // ============================================
 
   /** Stats globales */
-  async getGlobales() {
-    const totalApprenants = await this.prisma.apprenant.count();
-    const parStatut = await this.getParStatut({});
-    const enEmploi = await this.countEnEmploi({});
-    const tauxInsertion = this.calcTaux(totalApprenants, enEmploi);
+  async getGlobales(
+    promotionId?: string,
+    options: StatistiquesGlobalesQueryDto = {},
+  ) {
+    // Le cache depend de la promotion active et des blocs demandes par le frontend.
+    const cacheKey = this.buildGlobalStatsCacheKey(promotionId, options);
+    const cachedData = this.getCachedGlobalStats(cacheKey);
 
-    const [totalSituations, enAttente, validees] = await Promise.all([
-      this.prisma.situationProfessionnelle.count(),
-      this.prisma.situationProfessionnelle.count({ where: { valide: false } }),
-      this.prisma.situationProfessionnelle.count({ where: { valide: true } }),
+    if (cachedData) {
+      return cachedData;
+    }
+
+    const filter = promotionId ? { promotionId } : {};
+    const situationsWhere = promotionId ? { apprenant: { promotionId } } : {};
+    const includePromotions = options.includePromotions !== false;
+    const includeReferentiels = options.includeReferentiels !== false;
+    const includeSituationsRecentes =
+      options.includeSituationsRecentes !== false;
+    const promotionsPromise: Promise<PromotionStatsRow[]> = includePromotions
+      ? this.prisma.promotion.findMany({
+          ...(promotionId ? { where: { id: promotionId } } : {}),
+          select: {
+            id: true,
+            nom: true,
+            _count: { select: { apprenants: true } },
+          },
+        })
+      : Promise.resolve([]);
+    const referentielsPromise: Promise<ReferentielStatsRow[]> =
+      includeReferentiels
+        ? this.prisma.referentiel.findMany({
+            ...(promotionId
+              ? { where: { apprenants: { some: { promotionId } } } }
+              : {}),
+            select: {
+              id: true,
+              nom: true,
+              _count: {
+                select: {
+                  apprenants: promotionId
+                    ? { where: { promotionId } }
+                    : true,
+                },
+              },
+            },
+          })
+        : Promise.resolve([]);
+    const emploisDistinctsPromise: Promise<EmploiDistinctRow[]> =
+      includePromotions || includeReferentiels
+        ? this.prisma.situationProfessionnelle.findMany({
+            where: {
+              statut: 'EN_EMPLOI',
+              ...(promotionId ? { apprenant: { promotionId } } : {}),
+            },
+            distinct: ['apprenantId'],
+            select: {
+              apprenant: {
+                select: {
+                  promotionId: true,
+                  referentielId: true,
+                },
+              },
+            },
+          })
+        : Promise.resolve([]);
+
+    const [
+      totalApprenants,
+      parStatut,
+      enEmploi,
+      totalSituations,
+      enAttente,
+      validees,
+      situationsRecentes,
+      promotions,
+      referentiels,
+      emploisDistincts,
+    ] = await Promise.all([
+      promotionId
+        ? this.prisma.apprenant.count({ where: { promotionId } })
+        : this.prisma.apprenant.count(),
+      this.getParStatut(filter),
+      this.countEnEmploi(filter),
+      this.prisma.situationProfessionnelle.count({ where: situationsWhere }),
+      this.prisma.situationProfessionnelle.count({
+        where: { ...situationsWhere, valide: false },
+      }),
+      this.prisma.situationProfessionnelle.count({
+        where: { ...situationsWhere, valide: true },
+      }),
+      includeSituationsRecentes
+        ? this.prisma.situationProfessionnelle.findMany({
+            where: situationsWhere,
+            orderBy: { createdAt: 'desc' },
+            take: 5,
+            select: {
+              id: true,
+              statut: true,
+              createdAt: true,
+              valide: true,
+              apprenant: {
+                select: { user: { select: { nom: true, prenom: true } } },
+              },
+            },
+          })
+        : Promise.resolve([]),
+      promotionsPromise,
+      referentielsPromise,
+      emploisDistinctsPromise,
     ]);
 
-    const situationsRecentes =
-      await this.prisma.situationProfessionnelle.findMany({
-        orderBy: { createdAt: 'desc' },
-        take: 5,
-        select: {
-          id: true,
-          statut: true,
-          createdAt: true,
-          valide: true,
-          apprenant: {
-            select: { user: { select: { nom: true, prenom: true } } },
-          },
-        },
-      });
+    const tauxInsertion = this.calcTaux(totalApprenants, enEmploi);
 
-    // Stats par promotion
-    const promotions = await this.prisma.promotion.findMany({
-      select: { id: true, nom: true, _count: { select: { apprenants: true } } },
-    });
-    const parPromotion = await Promise.all(
-      promotions.map(async (p) => ({
-        promotionId: p.id,
-        promotionNom: p.nom,
-        total: p._count.apprenants,
-        enEmploi: await this.countEnEmploi({ promotionId: p.id }),
-      })),
-    );
+    const emploiParPromotion = new Map<string, number>();
+    const emploiParReferentiel = new Map<string, number>();
 
-    // Stats par référentiel
-    const referentiels = await this.prisma.referentiel.findMany({
-      select: { id: true, nom: true, _count: { select: { apprenants: true } } },
-    });
-    const parReferentiel = await Promise.all(
-      referentiels.map(async (r) => ({
-        referentielId: r.id,
-        referentielNom: r.nom,
-        total: r._count.apprenants,
-        enEmploi: await this.countEnEmploi({ referentielId: r.id }),
-      })),
-    );
+    for (const row of emploisDistincts) {
+      const apprenant = row.apprenant;
+      if (!apprenant) {
+        continue;
+      }
 
-    return {
+      emploiParPromotion.set(
+        apprenant.promotionId,
+        (emploiParPromotion.get(apprenant.promotionId) ?? 0) + 1,
+      );
+      emploiParReferentiel.set(
+        apprenant.referentielId,
+        (emploiParReferentiel.get(apprenant.referentielId) ?? 0) + 1,
+      );
+    }
+
+    const parPromotion = includePromotions
+      ? promotions.map((promotion) => {
+          const total = promotion._count.apprenants;
+          const totalEnEmploi = emploiParPromotion.get(promotion.id) ?? 0;
+          const taux = total > 0 ? (totalEnEmploi / total) * 100 : 0;
+          let statut = 'En cours';
+
+          if (taux >= 100) {
+            statut = 'Terminée';
+          } else if (taux >= 50) {
+            statut = 'En finale';
+          }
+
+          return {
+            promotionId: promotion.id,
+            promotionNom: promotion.nom,
+            total,
+            enEmploi: totalEnEmploi,
+            statut,
+          };
+        })
+      : [];
+
+    const parReferentiel = includeReferentiels
+      ? referentiels.map((referentiel) => ({
+          referentielId: referentiel.id,
+          referentielNom: referentiel.nom,
+          total: referentiel._count.apprenants,
+          enEmploi: emploiParReferentiel.get(referentiel.id) ?? 0,
+        }))
+      : [];
+
+    const result = {
       totalApprenants,
       totalSituations,
       enAttente,
@@ -166,6 +353,10 @@ export class StatistiquesService {
       parPromotion,
       parReferentiel,
     };
+
+    this.setCachedGlobalStats(cacheKey, result);
+
+    return result;
   }
 
   /** Stats par promotion */
@@ -182,15 +373,21 @@ export class StatistiquesService {
     });
     const parStatut = await this.getParStatut({ promotionId });
     const enEmploi = await this.countEnEmploi({ promotionId });
+    const situationsWhere = { apprenant: { promotionId } };
 
     const [totalSituations, enAttente, validees] = await Promise.all([
-      this.prisma.situationProfessionnelle.count(),
-      this.prisma.situationProfessionnelle.count({ where: { valide: false } }),
-      this.prisma.situationProfessionnelle.count({ where: { valide: true } }),
+      this.prisma.situationProfessionnelle.count({ where: situationsWhere }),
+      this.prisma.situationProfessionnelle.count({
+        where: { ...situationsWhere, valide: false },
+      }),
+      this.prisma.situationProfessionnelle.count({
+        where: { ...situationsWhere, valide: true },
+      }),
     ]);
 
     const situationsRecentes =
       await this.prisma.situationProfessionnelle.findMany({
+        where: situationsWhere,
         orderBy: { createdAt: 'desc' },
         take: 5,
         select: {

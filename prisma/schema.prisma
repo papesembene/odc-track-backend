@@ -3,8 +3,8 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
   directUrl = env("DIRECT_URL")
 }
 
@@ -20,6 +20,8 @@ model User {
   updatedAt  DateTime   @updatedAt
   apprenant  Apprenant?
   coach      Coach?
+
+  @@index([role, createdAt])
 }
 
 model Apprenant {
@@ -40,15 +42,22 @@ model Apprenant {
   user                  User                       @relation(fields: [userId], references: [id])
   documents             Document[]
   situations            SituationProfessionnelle[]
+
+  @@index([promotionId, createdAt])
+  @@index([referentielId, createdAt])
 }
 
 model Coach {
-  id          String   @id @default(uuid())
-  specialite  String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  userId      String   @unique
-  utilisateur User     @relation(fields: [userId], references: [id])
+  id            String      @id @default(uuid())
+  specialite    String?
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+  userId        String      @unique
+  referentielId String
+  referentiel   Referentiel @relation(fields: [referentielId], references: [id])
+  utilisateur   User        @relation(fields: [userId], references: [id])
+
+  @@index([referentielId])
 }
 
 model Referentiel {
@@ -58,6 +67,7 @@ model Referentiel {
   createdAt   DateTime               @default(now())
   updatedAt   DateTime               @updatedAt
   apprenants  Apprenant[]
+  coaches     Coach[]
   promotions  PromotionReferentiel[]
 }
 
@@ -67,8 +77,11 @@ model Promotion {
   annee        Int
   createdAt    DateTime               @default(now())
   updatedAt    DateTime               @updatedAt
+  estActive    Boolean                @default(false)
   apprenants   Apprenant[]
   referentiels PromotionReferentiel[]
+
+  @@index([estActive])
 }
 
 model PromotionReferentiel {
@@ -81,26 +94,27 @@ model PromotionReferentiel {
 }
 
 model SituationProfessionnelle {
-  id             String      @id @default(uuid())
-  statut         STATUT
-  dateDebut      DateTime
-  dateFin        DateTime?
-  commentaire    String?
-  valide         Boolean     @default(false)
-  dateValidation DateTime?
-  apprenantId    String
-  entrepriseId   String?
-  createdAt      DateTime    @default(now())
-  updatedAt      DateTime    @updatedAt
-  apprenant      Apprenant   @relation(fields: [apprenantId], references: [id])
-  entreprise     Entreprise? @relation(fields: [entrepriseId], references: [id])
-
-   nomEntrepriseLibre     String?
-  secteurEntrepriseLibre String?
+  id                     String      @id @default(uuid())
+  statut                 STATUT
+  dateDebut              DateTime
+  dateFin                DateTime?
+  commentaire            String?
+  valide                 Boolean     @default(false)
+  dateValidation         DateTime?
+  apprenantId            String
+  entrepriseId           String?
+  createdAt              DateTime    @default(now())
+  updatedAt              DateTime    @updatedAt
   adresseEntrepriseLibre String?
+  nomEntrepriseLibre     String?
+  secteurEntrepriseLibre String?
+  documents              Document[]
+  apprenant              Apprenant   @relation(fields: [apprenantId], references: [id])
+  entreprise             Entreprise? @relation(fields: [entrepriseId], references: [id])
 
-  documents Document[]
-
+  @@index([apprenantId, dateDebut])
+  @@index([valide, createdAt])
+  @@index([statut, apprenantId])
 }
 
 model Entreprise {
@@ -116,18 +130,19 @@ model Entreprise {
 }
 
 model Document {
-  id          String    @id @default(uuid())
+  id          String                    @id @default(uuid())
   type        DOCTYPE
   fichier     String
-  dateUpload  DateTime  @default(now())
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  dateUpload  DateTime                  @default(now())
+  createdAt   DateTime                  @default(now())
+  updatedAt   DateTime                  @updatedAt
   apprenantId String
-  apprenant   Apprenant @relation(fields: [apprenantId], references: [id])
-
   situationId String?
+  apprenant   Apprenant                 @relation(fields: [apprenantId], references: [id])
   situation   SituationProfessionnelle? @relation(fields: [situationId], references: [id])
 
+  @@index([apprenantId, createdAt])
+  @@index([situationId, createdAt])
 }
 
 enum ROLE {

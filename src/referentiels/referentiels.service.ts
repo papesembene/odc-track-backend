@@ -14,6 +14,14 @@ import {
 export class ReferentielsService {
   constructor(private readonly prisma: PrismaService) {}
 
+  private readonly referentielSelect = {
+    id: true,
+    nom: true,
+    description: true,
+    createdAt: true,
+    updatedAt: true,
+  } as const;
+
   async create(dto: CreateReferentielDto) {
     return this.prisma.referentiel.create({ data: dto });
   }
@@ -37,6 +45,8 @@ export class ReferentielsService {
         where,
         skip,
         take: limit,
+        // Selection stricte pour les listes et formulaires.
+        select: this.referentielSelect,
         orderBy: { [sortBy]: sortOrder },
       }),
       this.prisma.referentiel.count({ where }),
@@ -49,7 +59,10 @@ export class ReferentielsService {
   }
 
   async findOne(id: string) {
-    const item = await this.prisma.referentiel.findUnique({ where: { id } });
+    const item = await this.prisma.referentiel.findUnique({
+      where: { id },
+      select: this.referentielSelect,
+    });
     if (!item)
       throw new NotFoundException(REFERENTIELS_ERRORS.NOT_FOUND.message);
     return item;

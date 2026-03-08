@@ -1,5 +1,11 @@
-import { Injectable, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  OnModuleDestroy,
+  OnModuleInit,
+} from '@nestjs/common';
 import { PrismaClient } from '@prisma/client';
+import { DatabaseHealthService } from './database-health.service';
 
 declare global {
   // eslint-disable-next-line no-var
@@ -11,24 +17,41 @@ export class PrismaService
   extends PrismaClient
   implements OnModuleInit, OnModuleDestroy
 {
-  constructor() {
-    // On appelle super UNE SEULE FOIS
+  private readonly logger = new Logger(PrismaService.name);
+
+  constructor(private readonly dbHealth: DatabaseHealthService) {
     super({ log: ['error'] });
 
-    // Si le singleton global n'existe pas, on le crée
     if (!global.prisma) {
       global.prisma = this;
     }
 
-    // On retourne le singleton global
     return global.prisma;
   }
 
   async onModuleInit() {
-    await this.$connect();
+    try {
+      await this.$connect();
+      this.dbHealth.markAvailable();
+      this.logger.log('Connexion a la base de donnees etablie');
+    } catch (error) {
+      // On ne fait plus planter tout Nest au boot.
+      this.dbHealth.markUnavailable(error);
+      this.logger.error(
+        'Base de donnees indisponible au demarrage. L application reste lancee en mode degrade.',
+        error instanceof Error ? error.stack : String(error),
+      );
+    }
   }
 
   async onModuleDestroy() {
-    await this.$disconnect();
+    try {
+      await this.$disconnect();
+    } catch (error) {
+      this.logger.error(
+        'Erreur lors de la fermeture de la connexion Prisma',
+        error instanceof Error ? error.stack : String(error),
+      );
+    }
   }
 }

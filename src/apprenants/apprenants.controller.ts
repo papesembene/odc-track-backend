@@ -19,6 +19,7 @@ import { Roles } from 'src/auth/decorators/roles.decorator';
 import { JwtAuthGuard } from 'src/auth/guards/jwt-auth.guard';
 import { RolesGuard } from 'src/auth/guards/roles.guard';
 import { ResponseHelper } from 'src/common/helpers/response.helper';
+import { PromotionsService } from 'src/promotions/promotions.service';
 import { ApprenantsService } from './apprenants.service';
 import { ApprenantsQueryDto } from './dto/apprenants-query.dto';
 import { CreateApprenantDto } from './dto/create-apprenant.dto';
@@ -28,7 +29,10 @@ import { UpdateApprenantDto } from './dto/update-apprenant.dto';
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class ApprenantsController {
-  constructor(private readonly service: ApprenantsService) {}
+  constructor(
+    private readonly service: ApprenantsService,
+    private readonly promotionsService: PromotionsService,
+  ) {}
 
   @Post()
   @Roles(ROLE.ADMIN)
@@ -41,6 +45,12 @@ export class ApprenantsController {
   @Get()
   @Roles(ROLE.POLE_EMPLOI, ROLE.MANAGER)
   async findAll(@Query() query: ApprenantsQueryDto) {
+    // Filtrer automatiquement par la promotion active pour MANAGER et POLE_EMPLOI
+    const activePromotion = await this.promotionsService.getActive();
+    if (activePromotion) {
+      query.promotionId = activePromotion.id;
+    }
+
     const data = await this.service.findAll(query);
     return ResponseHelper.success(data);
   }

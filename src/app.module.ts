@@ -5,6 +5,7 @@ import { ConfigModule } from '@nestjs/config';
 import { PrismaModule } from './prisma/prisma.module';
 
 import { UsersModule } from './users/users.module';
+import { HealthController } from './health.controller';
 
 import { AuthModule } from './auth/auth.module';
 import { ReferentielsService } from './referentiels/referentiels.service';
@@ -15,12 +16,15 @@ import { EntreprisesModule } from './entreprises/entreprises.module';
 import { SituationsModule } from './situations/situations.module';
 import { DocumentsModule } from './documents/documents.module';
 import { StatistiquesModule } from './statistiques/statistiques.module';
+import { CoachesModule } from './coaches/coaches.module';
+import { CommonModule } from './common/common.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
     }),
+    CommonModule,
     PrismaModule,
 
     AuthModule,
@@ -32,8 +36,9 @@ import { StatistiquesModule } from './statistiques/statistiques.module';
     SituationsModule,
     DocumentsModule,
     StatistiquesModule,
+    CoachesModule,
   ],
-  controllers: [AppController],
+  controllers: [AppController, HealthController],
   providers: [AppService, ReferentielsService],
 })
 export class AppModule {}

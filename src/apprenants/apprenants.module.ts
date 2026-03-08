@@ -8,8 +8,10 @@ import { ApprenantsImportService } from './import/apprenants-import.service';
 import { ExcelParserService } from './import/excel-parser.service';
 import { PromotionApprenantsImportController } from './promotion-apprenants-import.controller';
 import { ReferentielApprenantsImportController } from './referentiel-apprenants-import.controller';
+import { PromotionsModule } from '../promotions/promotions.module';
 
 @Module({
+  imports: [PromotionsModule],
   controllers: [
     ApprenantsController,
     PromotionApprenantsImportController,

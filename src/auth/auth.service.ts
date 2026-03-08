@@ -7,12 +7,32 @@ import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { LoginDto } from './dto/login.dto';
-import { ROLE, User } from '@prisma/client';
+import { ROLE } from '@prisma/client';
 import { AUTH_ERROR } from 'src/common/constants/error-messages.constant';
 import * as bcrypt from 'bcrypt';
 import { JwtPayload } from 'src/common/types/jwt-payload.type';
 import { StringValue } from 'ms';
 import { ChangePasswordDto } from './dto/change-password.dto';
+
+const authUserSelect = {
+  id: true,
+  nom: true,
+  prenom: true,
+  email: true,
+  motDePasse: true,
+  role: true,
+  actif: true,
+} as const;
+
+type AuthUser = {
+  id: string;
+  nom: string;
+  prenom: string;
+  email: string;
+  motDePasse: string;
+  role: ROLE;
+  actif: boolean;
+};
 
 @Injectable()
 export class AuthService {
@@ -37,9 +57,12 @@ export class AuthService {
     await this.findActiveUserById(userId);
     return { message: 'Déconnexion réussie' };
   }
-  private async findActiveUserByemail(email: string): Promise<User> {
+
+  private async findActiveUserByemail(email: string): Promise<AuthUser> {
+    // On ne charge que les champs utiles au login pour limiter le payload DB.
     const user = await this.prisma.user.findUnique({
       where: { email },
+      select: authUserSelect,
     });
     if (!user || !user.actif) {
       throw new UnauthorizedException(AUTH_ERROR.UNAUTHORIZED.message);
@@ -47,9 +70,11 @@ export class AuthService {
     return user;
   }
 
-  private async findActiveUserById(id: string): Promise<User> {
+  private async findActiveUserById(id: string): Promise<AuthUser> {
+    // Meme principe ici: on evite de lire inutilement toute la ligne user.
     const user = await this.prisma.user.findUnique({
       where: { id },
+      select: authUserSelect,
     });
 
     if (!user || !user.actif) {
@@ -114,7 +139,7 @@ export class AuthService {
     }
   }
 
-  private formatUserResponse(user: User) {
+  private formatUserResponse(user: AuthUser) {
     return {
       id: user.id,
       nom: user.nom,

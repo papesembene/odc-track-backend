@@ -68,15 +68,20 @@ spec:
                 secretKeyRef:
                   name: odc-api-secrets
                   key: JWT_REFRESH_EXPIRES_IN
+            - name: FRONTEND_ORIGINS
+              valueFrom:
+                secretKeyRef:
+                  name: odc-api-secrets
+                  key: FRONTEND_ORIGINS
           readinessProbe:
             httpGet:
-              path: /api/v1
+              path: /api/v1/health/ready
               port: 3001
             initialDelaySeconds: 20
             periodSeconds: 10
           livenessProbe:
             httpGet:
-              path: /api/v1
+              path: /api/v1/health/live
               port: 3001
             initialDelaySeconds: 30
             periodSeconds: 15
