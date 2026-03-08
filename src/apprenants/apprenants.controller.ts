@@ -58,10 +58,7 @@ export class ApprenantsController {
 
   @Get('export/xlsx')
   @Roles(ROLE.POLE_EMPLOI, ROLE.MANAGER)
-  async exportXlsx(
-    @Query() query: ApprenantsQueryDto,
-    @Res() res: Response,
-  ) {
+  async exportXlsx(@Query() query: ApprenantsQueryDto, @Res() res: Response) {
     const activePromotion = await this.promotionsService.getActive();
     if (activePromotion) {
       query.promotionId = activePromotion.id;

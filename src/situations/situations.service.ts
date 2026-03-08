@@ -16,9 +16,7 @@ import {
   buildPaginationMeta,
   normalizePagination,
 } from 'src/common/helpers/pagination.helper';
-import {
-  DOCUMENTS_STORAGE,
-} from 'src/common/storage/documents-storage.interface';
+import { DOCUMENTS_STORAGE } from 'src/common/storage/documents-storage.interface';
 import type { DocumentsStorageService } from 'src/common/storage/documents-storage.interface';
 
 @Injectable()

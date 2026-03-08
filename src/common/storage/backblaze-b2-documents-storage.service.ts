@@ -15,9 +15,7 @@ import {
 } from './documents-storage.interface';
 
 @Injectable()
-export class BackblazeB2DocumentsStorageService
-  implements DocumentsStorageService
-{
+export class BackblazeB2DocumentsStorageService implements DocumentsStorageService {
   private readonly bucketName?: string;
   private readonly signedUrlTtlSeconds: number;
   private readonly client?: S3Client;

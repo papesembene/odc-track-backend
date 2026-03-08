@@ -13,14 +13,13 @@ export class ExcelParserService {
     }
 
     const worksheet = workbook.Sheets[firstSheetName];
-    const table = XLSX.utils.sheet_to_json<(string | number | boolean | null)[]>(
-      worksheet,
-      {
-        header: 1,
-        raw: false,
-        defval: '',
-      },
-    );
+    const table = XLSX.utils.sheet_to_json<
+      (string | number | boolean | null)[]
+    >(worksheet, {
+      header: 1,
+      raw: false,
+      defval: '',
+    });
 
     if (table.length < 2) {
       return { headers: [], rows: [] };

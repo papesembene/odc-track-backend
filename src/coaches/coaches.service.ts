@@ -17,9 +17,7 @@ import {
   buildPaginationMeta,
   normalizePagination,
 } from 'src/common/helpers/pagination.helper';
-import {
-  DOCUMENTS_STORAGE,
-} from 'src/common/storage/documents-storage.interface';
+import { DOCUMENTS_STORAGE } from 'src/common/storage/documents-storage.interface';
 import type { DocumentsStorageService } from 'src/common/storage/documents-storage.interface';
 
 @Injectable()
@@ -141,9 +139,12 @@ export class CoachesService {
       orderBy: [{ annee: 'desc' }, { nom: 'asc' }],
     });
 
-    let selectedPromotion = null as
-      | { id: string; nom: string; annee: number; estActive: boolean }
-      | null;
+    let selectedPromotion = null as {
+      id: string;
+      nom: string;
+      annee: number;
+      estActive: boolean;
+    } | null;
 
     if (promotionId) {
       selectedPromotion =

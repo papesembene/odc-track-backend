@@ -17,9 +17,7 @@ import {
   APPRENANTS_ERRORS,
   DOCUMENTS_ERRORS,
 } from 'src/common/constants/error-messages.constant';
-import {
-  DOCUMENTS_STORAGE,
-} from 'src/common/storage/documents-storage.interface';
+import { DOCUMENTS_STORAGE } from 'src/common/storage/documents-storage.interface';
 import type { DocumentsStorageService } from 'src/common/storage/documents-storage.interface';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { DocumentsQueryDto } from './dto/documents-query.dto';

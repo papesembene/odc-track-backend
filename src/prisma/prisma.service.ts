@@ -8,7 +8,6 @@ import { PrismaClient } from '@prisma/client';
 import { DatabaseHealthService } from './database-health.service';
 
 declare global {
-  // eslint-disable-next-line no-var
   var prisma: PrismaService | undefined;
 }
 
