@@ -212,6 +212,7 @@ export class StatistiquesService {
         : Promise.resolve([]),
       includePromotions
         ? this.prisma.promotion.findMany({
+            ...(promotionId ? { where: { id: promotionId } } : {}),
             select: {
               id: true,
               nom: true,
@@ -221,10 +222,19 @@ export class StatistiquesService {
         : Promise.resolve([]),
       includeReferentiels
         ? this.prisma.referentiel.findMany({
+            ...(promotionId
+              ? { where: { apprenants: { some: { promotionId } } } }
+              : {}),
             select: {
               id: true,
               nom: true,
-              _count: { select: { apprenants: true } },
+              _count: {
+                select: {
+                  apprenants: promotionId
+                    ? { where: { promotionId } }
+                    : true,
+                },
+              },
             },
           })
         : Promise.resolve([]),

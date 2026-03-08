@@ -1,5 +1,5 @@
 import { Transform } from 'class-transformer';
-import { IsBoolean, IsOptional } from 'class-validator';
+import { IsBoolean, IsOptional, IsString } from 'class-validator';
 
 function toBoolean(value: unknown) {
   if (typeof value === 'boolean') {
@@ -14,6 +14,10 @@ function toBoolean(value: unknown) {
 }
 
 export class StatistiquesGlobalesQueryDto {
+  @IsOptional()
+  @IsString()
+  promotionId?: string;
+
   @IsOptional()
   @Transform(({ value }) => toBoolean(value))
   @IsBoolean()
