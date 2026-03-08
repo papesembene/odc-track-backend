@@ -11,6 +11,7 @@ import { Prisma } from '@prisma/client';
 @Catch(
   Prisma.PrismaClientInitializationError,
   Prisma.PrismaClientKnownRequestError,
+  Prisma.PrismaClientUnknownRequestError,
 )
 export class PrismaAvailabilityFilter implements ExceptionFilter {
   private readonly logger = new Logger(PrismaAvailabilityFilter.name);
@@ -22,8 +23,10 @@ export class PrismaAvailabilityFilter implements ExceptionFilter {
 
     const isDbUnavailable =
       exception instanceof Prisma.PrismaClientInitializationError ||
+      exception instanceof Prisma.PrismaClientUnknownRequestError ||
       (exception instanceof Prisma.PrismaClientKnownRequestError &&
-        exception.code === 'P1001');
+        ['P1001', 'P1008', 'P1017'].includes(exception.code)) ||
+      this.looksLikeConnectivityError(exception);
 
     if (!isDbUnavailable) {
       throw exception;
@@ -63,5 +66,26 @@ export class PrismaAvailabilityFilter implements ExceptionFilter {
     }
 
     return 'Database unavailable';
+  }
+
+  /**
+   * Filet de sécurité:
+   * certaines erreurs réseau Prisma remontent en UnknownRequestError
+   * avec des messages "Closed" / "Can't reach database server".
+   */
+  private looksLikeConnectivityError(exception: unknown): boolean {
+    if (!(exception instanceof Error)) {
+      return false;
+    }
+
+    const message = exception.message.toLowerCase();
+    return (
+      message.includes("can't reach database server") ||
+      message.includes('error in postgresql connection') ||
+      message.includes('kind: closed') ||
+      message.includes('connection refused') ||
+      message.includes('name not resolved') ||
+      message.includes('getaddrinfo')
+    );
   }
 }

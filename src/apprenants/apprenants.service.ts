@@ -3,7 +3,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { Prisma, ROLE } from '@prisma/client';
+import { DOCTYPE, Prisma, ROLE } from '@prisma/client';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { ApprenantsQueryDto } from './dto/apprenants-query.dto';
 import { CreateApprenantDto } from './dto/create-apprenant.dto';
@@ -221,7 +221,29 @@ export class ApprenantsService {
 
     if (!apprenant)
       throw new NotFoundException(APPRENANTS_ERRORS.NOT_FOUND.message);
-    return apprenant;
+
+    // Le CV est un document global de l'apprenant (hors situation).
+    const cvDocument = await this.prisma.document.findFirst({
+      where: {
+        apprenantId: apprenant.id,
+        type: DOCTYPE.CV,
+        situationId: null,
+      },
+      select: {
+        id: true,
+        type: true,
+        fichier: true,
+        dateUpload: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+      orderBy: { updatedAt: 'desc' },
+    });
+
+    return {
+      ...apprenant,
+      cvDocument,
+    };
   }
 
   async update(id: string, dto: UpdateApprenantDto) {
@@ -323,7 +345,29 @@ export class ApprenantsService {
 
     if (!apprenant)
       throw new NotFoundException(APPRENANTS_ERRORS.NOT_FOUND.message);
-    return apprenant;
+
+    // Expose egalement le CV global sur le profil "me".
+    const cvDocument = await this.prisma.document.findFirst({
+      where: {
+        apprenantId: apprenant.id,
+        type: DOCTYPE.CV,
+        situationId: null,
+      },
+      select: {
+        id: true,
+        type: true,
+        fichier: true,
+        dateUpload: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+      orderBy: { updatedAt: 'desc' },
+    });
+
+    return {
+      ...apprenant,
+      cvDocument,
+    };
   }
 
   async updateMe(userId: string, dto: UpdateApprenantDto) {

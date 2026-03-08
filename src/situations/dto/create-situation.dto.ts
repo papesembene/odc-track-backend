@@ -12,8 +12,9 @@ export class CreateSituationDto {
   @IsEnum(STATUT)
   statut: STATUT;
 
+  @IsOptional()
   @IsDateString()
-  dateDebut: string;
+  dateDebut?: string;
 
   @IsOptional()
   @IsDateString()

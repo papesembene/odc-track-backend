@@ -5,7 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from 'src/prisma/prisma.service';
-import { Prisma, ROLE } from '@prisma/client';
+import { Prisma, ROLE, STATUT } from '@prisma/client';
 import { CreateSituationDto } from './dto/create-situation.dto';
 import { SituationsQueryDto } from './dto/situations-query.dto';
 import { UpdateSituationDto } from './dto/update-situation.dto';
@@ -210,28 +210,47 @@ export class SituationsService {
     if (dto.entrepriseId) {
       await this.ensureEntrepriseExists(dto.entrepriseId);
     }
-    this.validateEntrepriseSource(
-      {
-        entrepriseId: dto.entrepriseId,
-        nomEntrepriseLibre: dto.nomEntrepriseLibre,
-      },
-      false,
-    );
+    if (this.requiresEntreprise(dto.statut)) {
+      this.validateEntrepriseSource(
+        {
+          entrepriseId: dto.entrepriseId,
+          nomEntrepriseLibre: dto.nomEntrepriseLibre,
+        },
+        false,
+      );
+    }
 
     const entrepriseFields = this.normalizeEntrepriseFields({
-      entrepriseId: dto.entrepriseId,
-      nomEntrepriseLibre: dto.nomEntrepriseLibre,
-      secteurEntrepriseLibre: dto.secteurEntrepriseLibre,
-      adresseEntrepriseLibre: dto.adresseEntrepriseLibre,
+      entrepriseId: this.requiresEntreprise(dto.statut)
+        ? dto.entrepriseId
+        : undefined,
+      nomEntrepriseLibre: this.requiresEntreprise(dto.statut)
+        ? dto.nomEntrepriseLibre
+        : undefined,
+      secteurEntrepriseLibre: this.requiresEntreprise(dto.statut)
+        ? dto.secteurEntrepriseLibre
+        : undefined,
+      adresseEntrepriseLibre: this.requiresEntreprise(dto.statut)
+        ? dto.adresseEntrepriseLibre
+        : undefined,
     });
 
+    if (this.requiresDateDebut(dto.statut) && !dto.dateDebut) {
+      throw new BadRequestException(
+        'dateDebut est obligatoire pour ce type de situation',
+      );
+    }
+
+    // Pour PROJET_PERSO et RECHERCHE_EMPLOI, on autorise une date de debut
+    // absente et on prend la date du jour pour conserver la contrainte DB.
+    const normalizedDateDebut = dto.dateDebut ?? new Date().toISOString();
     this.validateDates(dto.dateDebut, dto.dateFin);
 
     return this.prisma.situationProfessionnelle.create({
       data: {
         apprenantId: apprenant.id,
         statut: dto.statut,
-        dateDebut: new Date(dto.dateDebut),
+        dateDebut: new Date(normalizedDateDebut),
         dateFin: dto.dateFin ? new Date(dto.dateFin) : null,
         commentaire: dto.commentaire,
         valide: false,
@@ -434,6 +453,22 @@ export class SituationsService {
         );
       }
     }
+  }
+
+  private requiresEntreprise(statut: STATUT): boolean {
+    return (
+      statut === STATUT.EN_STAGE ||
+      statut === STATUT.EN_EMPLOI ||
+      statut === STATUT.POURSUITE_ETUDES
+    );
+  }
+
+  private requiresDateDebut(statut: STATUT): boolean {
+    return (
+      statut === STATUT.EN_STAGE ||
+      statut === STATUT.EN_EMPLOI ||
+      statut === STATUT.POURSUITE_ETUDES
+    );
   }
 
   /**

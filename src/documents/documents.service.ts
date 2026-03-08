@@ -1,10 +1,13 @@
 import {
   BadRequestException,
   ForbiddenException,
+  InternalServerErrorException,
   Injectable,
+  Logger,
   NotFoundException,
+  ServiceUnavailableException,
 } from '@nestjs/common';
-import { Prisma, ROLE } from '@prisma/client';
+import { DOCTYPE, Prisma, ROLE } from '@prisma/client';
 import {
   buildPaginationMeta,
   normalizePagination,
@@ -20,6 +23,8 @@ import { CreateDocumentDto } from './dto/create-document.dto';
 
 @Injectable()
 export class DocumentsService {
+  private readonly logger = new Logger(DocumentsService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly storage: LocalDocumentsStorageService,
@@ -101,6 +106,16 @@ export class DocumentsService {
   ) {
     const apprenant = await this.getApprenantByUserId(requesterUserId);
     this.validateFile(file);
+    if (dto.type === DOCTYPE.CV) {
+      throw new BadRequestException(
+        'Utilisez /apprenants/me/cv pour ajouter ou remplacer le CV',
+      );
+    }
+    if (!dto.situationId) {
+      throw new BadRequestException(
+        'situationId est obligatoire pour ce type de document',
+      );
+    }
 
     const situation = await this.prisma.situationProfessionnelle.findUnique({
       where: { id: dto.situationId },
@@ -127,6 +142,86 @@ export class DocumentsService {
         fichier: storedPath,
       },
     });
+  }
+
+  /**
+   * Ajoute ou remplace le CV global de l'apprenant connecte.
+   * Le document CV est volontairement independant des situations.
+   */
+  async uploadCvForMe(requesterUserId: string, file: Express.Multer.File) {
+    const apprenant = await this.getApprenantByUserId(requesterUserId);
+    this.validateCvFile(file);
+    let storedPath: string | undefined;
+    let replacedPath: string | undefined;
+
+    try {
+      storedPath = await this.storage.save(file);
+      const existingCv = await this.getLatestCv(apprenant.id);
+
+      if (existingCv) {
+        replacedPath = existingCv.fichier;
+        const updated = await this.prisma.document.update({
+          where: { id: existingCv.id },
+          data: {
+            fichier: storedPath,
+            dateUpload: new Date(),
+            type: DOCTYPE.CV,
+            situationId: null,
+          },
+          select: this.documentListSelect,
+        });
+
+        // Une fois la référence DB mise à jour, on libère l'ancien fichier local.
+        if (replacedPath && replacedPath !== storedPath) {
+          await this.storage.remove(replacedPath).catch((error: unknown) => {
+            this.logger.warn(
+              `Impossible de supprimer l'ancien CV (${replacedPath}): ${
+                error instanceof Error ? error.message : String(error)
+              }`,
+            );
+          });
+        }
+
+        return updated;
+      }
+
+      return this.prisma.document.create({
+        data: {
+          apprenantId: apprenant.id,
+          type: DOCTYPE.CV,
+          fichier: storedPath,
+          situationId: null,
+        },
+        select: this.documentListSelect,
+      });
+    } catch (error) {
+      // Si l'écriture DB échoue, on nettoie le nouveau fichier pour éviter
+      // d'accumuler des fichiers orphelins sur le disque.
+      if (storedPath) {
+        await this.storage.remove(storedPath).catch((cleanupError: unknown) => {
+          this.logger.warn(
+            `Cleanup fichier CV échoué (${storedPath}): ${
+              cleanupError instanceof Error
+                ? cleanupError.message
+                : String(cleanupError)
+            }`,
+          );
+        });
+      }
+      this.handleUploadPersistenceError(error);
+    }
+  }
+
+  /**
+   * Retourne le CV global d'un apprenant, si disponible.
+   */
+  async findCvByApprenant(
+    apprenantId: string,
+    requesterUserId: string,
+    requesterRole: ROLE,
+  ) {
+    await this.ensureReadAccess(apprenantId, requesterUserId, requesterRole);
+    return this.getLatestCv(apprenantId);
   }
 
   /**
@@ -186,6 +281,14 @@ export class DocumentsService {
     }
 
     await this.prisma.document.delete({ where: { id } });
+    // On supprime aussi le binaire local pour éviter la saturation disque.
+    await this.storage.remove(document.fichier).catch((error: unknown) => {
+      this.logger.warn(
+        `Impossible de supprimer le fichier ${document.fichier}: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    });
     return { message: 'Document supprime avec succes' };
   }
 
@@ -261,6 +364,22 @@ export class DocumentsService {
   }
 
   /**
+   * Lit le CV global le plus recent d'un apprenant.
+   * On filtre par situationId=null pour separer le CV des documents de situation.
+   */
+  private async getLatestCv(apprenantId: string) {
+    return this.prisma.document.findFirst({
+      where: {
+        apprenantId,
+        type: DOCTYPE.CV,
+        situationId: null,
+      },
+      select: this.documentListSelect,
+      orderBy: { updatedAt: 'desc' },
+    });
+  }
+
+  /**
    * Valide le fichier uploadé:
    * - présence obligatoire
    * - taille maximale 10 Mo
@@ -292,5 +411,76 @@ export class DocumentsService {
     if (!allowed.has(extension)) {
       throw new BadRequestException(DOCUMENTS_ERRORS.INVALID_FILE_TYPE.message);
     }
+  }
+
+  /**
+   * Validation spécifique au CV:
+   * on impose un PDF uniquement pour homogénéiser la lecture côté staff.
+   */
+  private validateCvFile(file?: Express.Multer.File): void {
+    if (!file) {
+      throw new BadRequestException(DOCUMENTS_ERRORS.FILE_REQUIRED.message);
+    }
+
+    const maxSize = 10 * 1024 * 1024;
+    if (file.size > maxSize) {
+      throw new BadRequestException(DOCUMENTS_ERRORS.FILE_TOO_LARGE.message);
+    }
+
+    const fileName = file.originalname.toLowerCase();
+    if (!fileName.endsWith('.pdf')) {
+      throw new BadRequestException('Le CV doit être au format PDF');
+    }
+  }
+
+  /**
+   * Convertit les erreurs techniques d'upload (Prisma/stockage)
+   * en réponses API explicites pour éviter les 500 opaques côté frontend.
+   */
+  private handleUploadPersistenceError(error: unknown): never {
+    if (error instanceof Prisma.PrismaClientKnownRequestError) {
+      if (error.code === 'P2011') {
+        throw new BadRequestException(
+          'Contrainte base invalide sur Document. Vérifiez la migration Prisma de situationId nullable.',
+        );
+      }
+      if (error.code === 'P2003') {
+        throw new BadRequestException(
+          'Relation invalide pour le document (clé étrangère).',
+        );
+      }
+      if (error.code === 'P1001' || error.code === 'P1017') {
+        throw new ServiceUnavailableException(
+          'Base de données temporairement indisponible',
+        );
+      }
+    }
+
+    if (error instanceof Prisma.PrismaClientInitializationError) {
+      throw new ServiceUnavailableException(
+        'Base de données temporairement indisponible',
+      );
+    }
+
+    if (error instanceof Error) {
+      const msg = error.message.toLowerCase();
+      if (
+        msg.includes('eacces') ||
+        msg.includes('enoent') ||
+        msg.includes('enospc')
+      ) {
+        throw new InternalServerErrorException(
+          'Stockage local indisponible pour enregistrer le fichier',
+        );
+      }
+      this.logger.error(
+        `Erreur upload document: ${error.message}`,
+        error.stack,
+      );
+    }
+
+    throw new InternalServerErrorException(
+      'Erreur inattendue lors de l’upload du document',
+    );
   }
 }

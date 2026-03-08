@@ -81,6 +81,40 @@ export class DocumentsController {
   }
 
   /**
+   * Upload/Remplacement du CV global de l'apprenant connecte.
+   * Ce CV n'est pas rattache a une situation.
+   */
+  @Post('/apprenants/me/cv')
+  @Roles(ROLE.APPRENANT)
+  @HttpCode(HttpStatus.CREATED)
+  @UseInterceptors(FileInterceptor('file'))
+  async uploadCvForMe(
+    @Req() req: Request & { user: { id: string } },
+    @UploadedFile() file: Express.Multer.File,
+  ) {
+    const data = await this.service.uploadCvForMe(req.user.id, file);
+    return ResponseHelper.success(data, 'CV mis a jour avec succes');
+  }
+
+  /**
+   * Retourne le CV global d'un apprenant.
+   * Accessible par staff, et par l'apprenant sur son propre profil.
+   */
+  @Get('/apprenants/:apprenantId/cv')
+  @Roles(ROLE.POLE_EMPLOI, ROLE.MANAGER, ROLE.COACH, ROLE.APPRENANT)
+  async findCvByApprenant(
+    @Param('apprenantId') apprenantId: string,
+    @Req() req: Request & { user: { id: string; role: ROLE } },
+  ) {
+    const data = await this.service.findCvByApprenant(
+      apprenantId,
+      req.user.id,
+      req.user.role,
+    );
+    return ResponseHelper.success(data);
+  }
+
+  /**
    * Liste les documents d'une situation.
    * Staff autorisé; un apprenant ne voit que ses propres situations.
    */
