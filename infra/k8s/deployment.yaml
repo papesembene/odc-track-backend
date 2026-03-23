@@ -22,7 +22,7 @@ spec:
     spec:
       containers:
         - name: odc-api
-          image: papesembene/odc-track-backend:gitops-v1
+          image: papesembene/odc-track-backend:gitops-v2
           imagePullPolicy: Always
           ports:
             - containerPort: 3001
