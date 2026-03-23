@@ -35,4 +35,6 @@ RUN mkdir -p uploads/documents
 
 EXPOSE 3000
 
-CMD ["sh", "-c", "npx prisma migrate deploy && node dist/src/main.js"]
+# Les migrations doivent etre executees separement du web service pour eviter
+# qu'un lock ou une lenteur DB bloque completement le demarrage en production.
+CMD ["node", "dist/src/main.js"]
