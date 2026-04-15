@@ -46,9 +46,10 @@ export class ApprenantsController {
   @Get()
   @Roles(ROLE.POLE_EMPLOI, ROLE.MANAGER)
   async findAll(@Query() query: ApprenantsQueryDto) {
-    // Filtrer automatiquement par la promotion active pour MANAGER et POLE_EMPLOI
+    // La promotion active reste le filtre par defaut, sans bloquer une
+    // promotion explicitement choisie dans l'interface.
     const activePromotion = await this.promotionsService.getActive();
-    if (activePromotion) {
+    if (!query.promotionId && activePromotion) {
       query.promotionId = activePromotion.id;
     }
 
@@ -60,7 +61,7 @@ export class ApprenantsController {
   @Roles(ROLE.POLE_EMPLOI, ROLE.MANAGER)
   async exportXlsx(@Query() query: ApprenantsQueryDto, @Res() res: Response) {
     const activePromotion = await this.promotionsService.getActive();
-    if (activePromotion) {
+    if (!query.promotionId && activePromotion) {
       query.promotionId = activePromotion.id;
     }
 

@@ -537,17 +537,11 @@ export class SituationsService {
     const { page, limit, skip } = normalizePagination(query);
     const sortBy = query.sortBy ?? 'createdAt';
     const sortOrder = query.sortOrder ?? 'desc';
-    const where = this.buildSituationsWhere({
+    const pendingWhere = this.buildSituationsWhere({
       ...query,
       valide: false,
-      ...(promotionId ? { apprenantId: undefined } : {}),
+        promotionId,
     });
-
-    const pendingWhere: Prisma.SituationProfessionnelleWhereInput = {
-      ...where,
-      valide: false,
-      ...(promotionId ? { apprenant: { promotionId } } : {}),
-    };
 
     const [items, totalItems] = await this.prisma.$transaction([
       this.prisma.situationProfessionnelle.findMany({
@@ -574,6 +568,43 @@ export class SituationsService {
       ...(query.entrepriseId ? { entrepriseId: query.entrepriseId } : {}),
       ...(query.statut ? { statut: query.statut } : {}),
       ...(typeof query.valide === 'boolean' ? { valide: query.valide } : {}),
+      ...(query.promotionId || query.referentielId
+        ? {
+            apprenant: {
+              ...(query.promotionId ? { promotionId: query.promotionId } : {}),
+              ...(query.referentielId
+                ? { referentielId: query.referentielId }
+                : {}),
+            },
+          }
+        : {}),
+      ...(query.search
+        ? {
+            OR: [
+              {
+                apprenant: {
+                  user: {
+                    nom: { contains: query.search, mode: 'insensitive' },
+                  },
+                },
+              },
+              {
+                apprenant: {
+                  user: {
+                    prenom: { contains: query.search, mode: 'insensitive' },
+                  },
+                },
+              },
+              {
+                apprenant: {
+                  user: {
+                    email: { contains: query.search, mode: 'insensitive' },
+                  },
+                },
+              },
+            ],
+          }
+        : {}),
     };
 
     if (query.dateDebutFrom || query.dateDebutTo) {

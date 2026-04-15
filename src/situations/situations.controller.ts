@@ -54,10 +54,12 @@ export class SituationsController {
   @Get('/situations/attentes')
   @Roles(ROLE.POLE_EMPLOI, ROLE.MANAGER)
   async findPendingValidations(@Query() query: SituationsQueryDto) {
-    // Filtrer automatiquement par la promotion active pour MANAGER et POLE_EMPLOI
+    // La promotion active sert de valeur par defaut, mais un filtre explicite
+    // choisi dans l'UI doit toujours etre respecte.
     const activePromotion = await this.promotionsService.getActive();
+    const effectivePromotionId = query.promotionId ?? activePromotion?.id;
     const data = await this.service.findPendingValidations(
-      activePromotion ? activePromotion.id : undefined,
+      effectivePromotionId,
       query,
     );
     return ResponseHelper.success(data);

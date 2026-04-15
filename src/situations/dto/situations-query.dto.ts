@@ -6,6 +6,7 @@ import {
   IsIn,
   IsInt,
   IsOptional,
+  IsString,
   IsUUID,
   Max,
   Min,
@@ -32,6 +33,18 @@ export class SituationsQueryDto {
   @IsOptional()
   @IsUUID()
   entrepriseId?: string;
+
+  @IsOptional()
+  @IsUUID()
+  promotionId?: string;
+
+  @IsOptional()
+  @IsUUID()
+  referentielId?: string;
+
+  @IsOptional()
+  @IsString()
+  search?: string;
 
   @IsOptional()
   @IsEnum(STATUT)
