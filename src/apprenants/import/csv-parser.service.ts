@@ -16,10 +16,13 @@ export class CsvParserService {
       return { headers: [], rows: [] };
     }
 
-    const headers = this.parseLine(lines[0]).map((h) => h.trim().toLowerCase());
+    const delimiter = this.detectDelimiter(lines[0]);
+    const headers = this.parseLine(lines[0], delimiter).map((h) =>
+      h.trim().toLowerCase(),
+    );
 
     const rows = lines.slice(1).map((line) => {
-      const values = this.parseLine(line);
+      const values = this.parseLine(line, delimiter);
       return headers.reduce<ImportRow>((acc, header, index) => {
         acc[header] = (values[index] ?? '').trim();
         return acc;
@@ -32,7 +35,7 @@ export class CsvParserService {
   /**
    * Parse une ligne CSV (supporte les guillemets et virgules échappées).
    */
-  private parseLine(line: string): string[] {
+  private parseLine(line: string, delimiter: string): string[] {
     const output: string[] = [];
     let current = '';
     let inQuotes = false;
@@ -52,7 +55,7 @@ export class CsvParserService {
         continue;
       }
 
-      if (char === ',' && !inQuotes) {
+      if (char === delimiter && !inQuotes) {
         output.push(current);
         current = '';
         continue;
@@ -63,5 +66,11 @@ export class CsvParserService {
 
     output.push(current);
     return output;
+  }
+
+  private detectDelimiter(line: string): string {
+    const semicolonCount = (line.match(/;/g) ?? []).length;
+    const commaCount = (line.match(/,/g) ?? []).length;
+    return semicolonCount > commaCount ? ';' : ',';
   }
 }

@@ -1,5 +1,12 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import {
+  ForbiddenException,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
 import { Prisma } from '@prisma/client';
+import { InOdcClientService } from 'src/integrations/in-odc/in-odc-client.service';
+import { InOdcPromotion } from 'src/integrations/in-odc/in-odc.types';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { CreatePromotionDto } from './dto/create-promotion.dto';
 import { PromotionsQueryDto } from './dto/promotions-query.dto';
@@ -38,21 +45,14 @@ export class PromotionsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly cacheVersionService: CacheVersionService,
+    private readonly inOdcClientService: InOdcClientService,
   ) {}
 
-  async create(dto: CreatePromotionDto) {
-    return this.prisma.promotion.create({
-      data: {
-        nom: dto.nom,
-        annee: dto.annee,
-        referentiels: {
-          create: dto.referentielIds.map((referentielId) => ({
-            referentiel: { connect: { id: referentielId } },
-          })),
-        },
-      },
-      select: this.promotionWithReferentielsSelect,
-    });
+  create(dto: CreatePromotionDto): never {
+    void dto;
+    throw new ForbiddenException(
+      'Les promotions sont gerees dans in-odc. La creation locale est desactivee dans Suivi insertion.',
+    );
   }
 
   async findAll(query: PromotionsQueryDto) {
@@ -94,6 +94,85 @@ export class PromotionsService {
     };
   }
 
+  async findAllFromInOdc(query: PromotionsQueryDto) {
+    const { page, limit } = normalizePagination(query);
+    const [rawPromotions, masterLearners] = await Promise.all([
+      this.inOdcClientService.getPromotions(),
+      this.inOdcClientService.getAllReferenceLearners(),
+    ]);
+    const normalizedPromotions = rawPromotions.map((promotion) =>
+      this.normalizeInOdcPromotion(promotion),
+    );
+
+    const filteredItems = normalizedPromotions
+      .filter((promotion) => {
+        if (
+          query.search &&
+          !promotion.nom.toLowerCase().includes(query.search.toLowerCase())
+        ) {
+          return false;
+        }
+
+        if (
+          typeof query.annee === 'number' &&
+          promotion.annee !== query.annee
+        ) {
+          return false;
+        }
+
+        if (
+          query.referentielId &&
+          !promotion.referentiels.some(
+            (item) => item.referentielId === query.referentielId,
+          )
+        ) {
+          return false;
+        }
+
+        return true;
+      })
+      .sort((left, right) => this.compareMasterPromotions(left, right, query));
+
+    const filteredPromotionIds = new Set(filteredItems.map((item) => item.id));
+    const relevantLearners = masterLearners.filter((learner) =>
+      filteredPromotionIds.has(learner.promotion.id),
+    );
+    const emploiByPromotion =
+      await this.buildMasterPromotionEmploymentMap(relevantLearners);
+    const learnersCountByPromotion = new Map<string, number>();
+
+    for (const learner of relevantLearners) {
+      learnersCountByPromotion.set(
+        learner.promotion.id,
+        (learnersCountByPromotion.get(learner.promotion.id) ?? 0) + 1,
+      );
+    }
+
+    const totalItems = filteredItems.length;
+    const start = (page - 1) * limit;
+    const items = filteredItems.slice(start, start + limit).map((promotion) => {
+      const totalApprenants = learnersCountByPromotion.get(promotion.id) ?? 0;
+      const enEmploi = emploiByPromotion.get(promotion.id) ?? 0;
+
+      return {
+        ...promotion,
+        totalApprenants,
+        enEmploi,
+        tauxInsertion: this.calcTaux(totalApprenants, enEmploi),
+      };
+    });
+
+    return {
+      items,
+      pagination: buildPaginationMeta(page, limit, totalItems),
+    };
+  }
+
+  async getActiveFromInOdc() {
+    const promotion = await this.inOdcClientService.getActivePromotion();
+    return this.normalizeInOdcPromotion(promotion);
+  }
+
   async findOne(id: string) {
     const item = await this.prisma.promotion.findUnique({
       where: { id },
@@ -107,76 +186,30 @@ export class PromotionsService {
     return item;
   }
 
-  async update(id: string, dto: UpdatePromotionDto) {
-    await this.findOne(id);
-
-    const shouldUpdateReferentiels =
-      Array.isArray(dto.referentielIds) && dto.referentielIds.length >= 0;
-
-    return this.prisma.promotion.update({
-      where: { id },
-      data: {
-        nom: dto.nom,
-        annee: dto.annee,
-        ...(shouldUpdateReferentiels
-          ? {
-              referentiels: {
-                deleteMany: {},
-                create: dto.referentielIds!.map((referentielId) => ({
-                  referentiel: { connect: { id: referentielId } },
-                })),
-              },
-            }
-          : {}),
-      },
-      select: this.promotionWithReferentielsSelect,
-    });
+  update(id: string, dto: UpdatePromotionDto): never {
+    void id;
+    void dto;
+    throw new ForbiddenException(
+      'Les promotions sont gerees dans in-odc. La modification locale est desactivee dans Suivi insertion.',
+    );
   }
 
-  async remove(id: string) {
-    await this.findOne(id);
-
-    await this.prisma.promotion.delete({
-      where: { id },
-    });
-
-    return { message: 'Promotion supprimée avec succès' };
+  remove(id: string): never {
+    void id;
+    throw new ForbiddenException(
+      'Les promotions sont gerees dans in-odc. La suppression locale est desactivee dans Suivi insertion.',
+    );
   }
 
   /**
    * Active une promotion et désactive automatiquement toutes les autres
    * (une seule promotion peut être active à la fois)
    */
-  async setActive(id: string) {
-    // Vérifier que la promotion existe
-    await this.findOne(id);
-
-    // Utiliser une transaction pour:
-    // 1. Désactiver toutes les promotions
-    // 2. Activer la promotion sélectionnée
-    const result = await this.prisma.$transaction(async (tx) => {
-      // Désactiver toutes les promotions
-      await tx.promotion.updateMany({
-        where: { estActive: true },
-        data: { estActive: false },
-      });
-
-      // Activer la promotion sélectionnée
-      const updated = await tx.promotion.update({
-        where: { id },
-        data: { estActive: true },
-        select: this.promotionWithReferentielsSelect,
-      });
-
-      return updated;
-    });
-
-    // Une promotion active modifie directement les statistiques manager.
-    // On invalide donc le cache des stats pour que la prochaine lecture
-    // recalcule immediatement les donnees.
-    this.cacheVersionService.bumpVersion('global-stats');
-
-    return result;
+  setActive(id: string): never {
+    void id;
+    throw new ForbiddenException(
+      "L'activation de promotion se fait dans in-odc. Cette action est desactivee dans Suivi insertion.",
+    );
   }
 
   /**
@@ -217,5 +250,161 @@ export class PromotionsService {
         message.includes('column') ||
         message.includes('unknown field'))
     );
+  }
+
+  private normalizeInOdcPromotion(promotion: InOdcPromotion) {
+    return {
+      id: promotion.id,
+      inOdcId: promotion.id,
+      nom: promotion.name,
+      annee: new Date(promotion.startDate).getFullYear(),
+      estActive: promotion.status === 'ACTIVE',
+      statut: promotion.status,
+      dateDebut: promotion.startDate,
+      dateFin: promotion.endDate,
+      photoUrl: promotion.photoUrl ?? null,
+      referentiels: (promotion.referentials ?? []).map((referential) => ({
+        referentielId: referential.id,
+        referentiel: {
+          id: referential.id,
+          nom: referential.name,
+          description: referential.description ?? null,
+        },
+      })),
+    };
+  }
+
+  private calcTaux(total: number, enEmploi: number) {
+    return total === 0 ? 0 : Number(((enEmploi / total) * 100).toFixed(2));
+  }
+
+  private async buildMasterPromotionEmploymentMap(
+    learners: Array<{
+      promotion: { id: string };
+      user: { email: string };
+      phone: string;
+    }>,
+  ) {
+    const normalizedEmails = Array.from(
+      new Set(
+        learners
+          .map((learner) => learner.user.email?.trim().toLowerCase())
+          .filter((value): value is string => Boolean(value)),
+      ),
+    );
+    const normalizedPhones = Array.from(
+      new Set(
+        learners
+          .map((learner) => learner.phone?.trim())
+          .filter((value): value is string => Boolean(value)),
+      ),
+    );
+
+    const orConditions: Prisma.ApprenantWhereInput[] = [];
+
+    if (normalizedEmails.length > 0) {
+      orConditions.push({
+        user: {
+          email: {
+            in: normalizedEmails,
+          },
+        },
+      });
+    }
+
+    if (normalizedPhones.length > 0) {
+      orConditions.push({
+        telephone: {
+          in: normalizedPhones,
+        },
+      });
+    }
+
+    if (orConditions.length === 0) {
+      return new Map<string, number>();
+    }
+
+    const localApprenants = await this.prisma.apprenant.findMany({
+      where: {
+        OR: orConditions,
+      },
+      select: {
+        telephone: true,
+        user: {
+          select: {
+            email: true,
+          },
+        },
+        situations: {
+          where: {
+            statut: 'EN_EMPLOI',
+          },
+          select: {
+            id: true,
+          },
+          take: 1,
+        },
+      },
+    });
+
+    const emploiByEmail = new Map<string, boolean>();
+    const emploiByPhone = new Map<string, boolean>();
+
+    for (const apprenant of localApprenants) {
+      const hasEmployment = apprenant.situations.length > 0;
+      const normalizedEmail = apprenant.user.email.trim().toLowerCase();
+      emploiByEmail.set(normalizedEmail, hasEmployment);
+
+      if (apprenant.telephone?.trim()) {
+        emploiByPhone.set(apprenant.telephone.trim(), hasEmployment);
+      }
+    }
+
+    const result = new Map<string, number>();
+
+    for (const learner of learners) {
+      const normalizedEmail = learner.user.email?.trim().toLowerCase();
+      const normalizedPhone = learner.phone?.trim();
+      const hasEmployment =
+        (normalizedEmail ? emploiByEmail.get(normalizedEmail) : undefined) ??
+        (normalizedPhone ? emploiByPhone.get(normalizedPhone) : undefined) ??
+        false;
+
+      if (!hasEmployment) {
+        continue;
+      }
+
+      result.set(
+        learner.promotion.id,
+        (result.get(learner.promotion.id) ?? 0) + 1,
+      );
+    }
+
+    return result;
+  }
+
+  private compareMasterPromotions(
+    left: ReturnType<PromotionsService['normalizeInOdcPromotion']>,
+    right: ReturnType<PromotionsService['normalizeInOdcPromotion']>,
+    query: PromotionsQueryDto,
+  ) {
+    const sortBy = query.sortBy ?? 'createdAt';
+    const sortOrder = query.sortOrder ?? 'desc';
+
+    let comparison = 0;
+
+    if (sortBy === 'nom') {
+      comparison = left.nom.localeCompare(right.nom, 'fr', {
+        sensitivity: 'base',
+      });
+    } else if (sortBy === 'annee') {
+      comparison = left.annee - right.annee;
+    } else {
+      comparison =
+        new Date(left.dateDebut).getTime() -
+        new Date(right.dateDebut).getTime();
+    }
+
+    return sortOrder === 'asc' ? comparison : comparison * -1;
   }
 }

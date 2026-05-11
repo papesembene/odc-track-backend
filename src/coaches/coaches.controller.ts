@@ -115,8 +115,8 @@ export class CoachesController {
   @Post()
   @Roles(ROLE.MANAGER, ROLE.ADMIN)
   @HttpCode(HttpStatus.CREATED)
-  async create(@Body() data: CreateCoachDto) {
-    const coach = await this.coachesService.create(data);
+  create(@Body() data: CreateCoachDto) {
+    const coach = this.coachesService.create(data);
     return ResponseHelper.success(coach, 'Coach créé avec succès');
   }
 }

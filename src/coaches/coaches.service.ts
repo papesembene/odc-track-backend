@@ -1,14 +1,12 @@
 import {
-  ConflictException,
   ForbiddenException,
   Inject,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
 import { DOCTYPE, Prisma, STATUT } from '@prisma/client';
+import { InOdcClientService } from 'src/integrations/in-odc/in-odc-client.service';
 import { PrismaService } from 'src/prisma/prisma.service';
-import { USER_ERRORS } from 'src/common/constants/error-messages.constant';
-import * as bcrypt from 'bcrypt';
 import { CreateCoachDto } from './dto/create-coach.dto';
 import { CoachesQueryDto } from './dto/coaches-query.dto';
 import { CoachApprenantsQueryDto } from './dto/coach-apprenants-query.dto';
@@ -24,6 +22,7 @@ import type { DocumentsStorageService } from 'src/common/storage/documents-stora
 export class CoachesService {
   constructor(
     private readonly prisma: PrismaService,
+    private readonly inOdcClientService: InOdcClientService,
     @Inject(DOCUMENTS_STORAGE)
     private readonly documentsStorage: DocumentsStorageService,
   ) {}
@@ -173,6 +172,46 @@ export class CoachesService {
    * Récupérer la liste de tous les coaches
    */
   async findAll(query: CoachesQueryDto) {
+    const items = (await this.inOdcClientService.getCoaches()).map((coach) => ({
+      id: coach.id,
+      nom: coach.lastName,
+      prenom: coach.firstName,
+      email: coach.user?.email ?? '',
+      role: coach.user?.role ?? 'COACH',
+      actif: true,
+      createdAt: coach.createdAt ?? new Date(0).toISOString(),
+      updatedAt: coach.updatedAt ?? null,
+      referentiel: coach.referentials[0]
+        ? {
+            id: coach.referentials[0].id,
+            nom: coach.referentials[0].name,
+          }
+        : null,
+      specialite: coach.referentials[0]?.name ?? null,
+      telephone: coach.phone ?? null,
+      matricule: coach.matricule ?? null,
+    }));
+
+    const search = query.search?.trim().toLowerCase();
+    const filteredItems = search
+      ? items.filter((coach) =>
+          [coach.nom, coach.prenom, coach.email, coach.referentiel?.nom ?? '']
+            .join(' ')
+            .toLowerCase()
+            .includes(search),
+        )
+      : items;
+
+    const { page, limit } = normalizePagination(query);
+    const start = (page - 1) * limit;
+
+    return {
+      items: filteredItems.slice(start, start + limit),
+      pagination: buildPaginationMeta(page, limit, filteredItems.length),
+    };
+  }
+
+  async findAllLegacy(query: CoachesQueryDto) {
     const { page, limit, skip } = normalizePagination(query);
     const where: Prisma.UserWhereInput = {
       role: 'COACH',
@@ -221,61 +260,11 @@ export class CoachesService {
     };
   }
 
-  /**
-   * Créer un nouveau coach avec assignation à un référentiel
-   */
-  async create(data: CreateCoachDto) {
-    // Vérifier si l'email existe déjà
-    const existingUser = await this.prisma.user.findUnique({
-      where: { email: data.email },
-    });
-
-    if (existingUser) {
-      throw new ConflictException(USER_ERRORS.EMAIL_EXISTS.message);
-    }
-
-    // Hasher le mot de passe par défaut
-    const hashedPassword = await bcrypt.hash('Odc@1234', 10);
-
-    // Créer l'utilisateur et le coach dans une transaction
-    const result = await this.prisma.$transaction(async (prisma) => {
-      // 1. Créer l'utilisateur
-      const user = await prisma.user.create({
-        data: {
-          nom: data.nom,
-          prenom: data.prenom,
-          email: data.email,
-          motDePasse: hashedPassword,
-          role: 'COACH',
-        },
-      });
-
-      // 2. Créer le coach avec les références
-      const coach = await prisma.coach.create({
-        data: {
-          userId: user.id,
-          referentielId: data.referentielId,
-          specialite: data.specialite,
-        },
-        include: {
-          referentiel: true,
-          utilisateur: {
-            select: {
-              id: true,
-              nom: true,
-              prenom: true,
-              email: true,
-              role: true,
-              actif: true,
-            },
-          },
-        },
-      });
-
-      return coach;
-    });
-
-    return result;
+  create(data: CreateCoachDto): never {
+    void data;
+    throw new ForbiddenException(
+      'Les coaches sont geres dans in-odc. La creation locale est desactivee dans Suivi insertion.',
+    );
   }
 
   async findMyApprenants(userId: string, query: CoachApprenantsQueryDto) {

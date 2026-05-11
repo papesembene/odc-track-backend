@@ -27,7 +27,7 @@ export class StatistiquesController {
   async globales(@Query() query: StatistiquesGlobalesQueryDto) {
     // Par defaut, le backoffice travaille sur la promotion active.
     // Si le frontend transmet explicitement une promotion, on respecte ce choix.
-    const activePromotion = await this.promotionsService.getActive();
+    const activePromotion = await this.promotionsService.getActiveFromInOdc();
     const data = await this.service.getGlobales(
       query.promotionId ?? (activePromotion ? activePromotion.id : undefined),
       query,
