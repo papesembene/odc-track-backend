@@ -42,6 +42,12 @@ export class ReferentielsController {
     return ResponseHelper.success(data);
   }
 
+  @Get('master-data')
+  async findAllMasterData(@Query() query: ReferentielsQueryDto) {
+    const data = await this.service.findAllFromInOdc(query);
+    return ResponseHelper.success(data);
+  }
+
   @Get(':id')
   async findOne(@Param('id') id: string) {
     const data = await this.service.findOne(id);

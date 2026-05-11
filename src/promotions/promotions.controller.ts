@@ -42,6 +42,18 @@ export class PromotionsController {
     return ResponseHelper.success(data);
   }
 
+  @Get('master-data')
+  async findAllMasterData(@Query() query: PromotionsQueryDto) {
+    const data = await this.service.findAllFromInOdc(query);
+    return ResponseHelper.success(data);
+  }
+
+  @Get('master-data/active')
+  async getActiveMasterData() {
+    const data = await this.service.getActiveFromInOdc();
+    return ResponseHelper.success(data);
+  }
+
   /**
    * GET /api/v1/promotions/active
    * Récupère la promotion active (si aucune n'est active, retourne null)

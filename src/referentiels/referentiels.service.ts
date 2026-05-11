@@ -1,5 +1,11 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { Prisma } from '@prisma/client';
+import { InOdcClientService } from 'src/integrations/in-odc/in-odc-client.service';
+import { InOdcReferential } from 'src/integrations/in-odc/in-odc.types';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { CreateReferentielDto } from './dto/create-referentiel.dto';
 import { UpdateReferentielDto } from './dto/update-referentiel.dto';
@@ -12,7 +18,10 @@ import {
 
 @Injectable()
 export class ReferentielsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly inOdcClientService: InOdcClientService,
+  ) {}
 
   private readonly referentielSelect = {
     id: true,
@@ -23,7 +32,10 @@ export class ReferentielsService {
   } as const;
 
   async create(dto: CreateReferentielDto) {
-    return this.prisma.referentiel.create({ data: dto });
+    void dto;
+    throw new ForbiddenException(
+      'Les referentiels sont geres dans in-odc. La creation locale est desactivee dans Suivi insertion.',
+    );
   }
 
   async findAll(query: ReferentielsQueryDto) {
@@ -58,6 +70,36 @@ export class ReferentielsService {
     };
   }
 
+  async findAllFromInOdc(query: ReferentielsQueryDto) {
+    const { page, limit } = normalizePagination(query);
+    const normalizedReferentiels = (
+      await this.inOdcClientService.getReferentials()
+    ).map((referential) => this.normalizeInOdcReferential(referential));
+
+    const filteredItems = normalizedReferentiels
+      .filter((referential) => {
+        if (!query.search) {
+          return true;
+        }
+
+        const search = query.search.toLowerCase();
+        return (
+          referential.nom.toLowerCase().includes(search) ||
+          (referential.description ?? '').toLowerCase().includes(search)
+        );
+      })
+      .sort((left, right) => this.compareMasterReferentiels(left, right, query));
+
+    const totalItems = filteredItems.length;
+    const start = (page - 1) * limit;
+    const items = filteredItems.slice(start, start + limit);
+
+    return {
+      items,
+      pagination: buildPaginationMeta(page, limit, totalItems),
+    };
+  }
+
   async findOne(id: string) {
     const item = await this.prisma.referentiel.findUnique({
       where: { id },
@@ -69,13 +111,55 @@ export class ReferentielsService {
   }
 
   async update(id: string, dto: UpdateReferentielDto) {
-    await this.findOne(id);
-    return this.prisma.referentiel.update({ where: { id }, data: dto });
+    void id;
+    void dto;
+    throw new ForbiddenException(
+      'Les referentiels sont geres dans in-odc. La modification locale est desactivee dans Suivi insertion.',
+    );
   }
 
   async remove(id: string) {
-    await this.findOne(id);
-    await this.prisma.referentiel.delete({ where: { id } });
-    return { message: 'Référentiel supprimé avec succès' };
+    void id;
+    throw new ForbiddenException(
+      'Les referentiels sont geres dans in-odc. La suppression locale est desactivee dans Suivi insertion.',
+    );
+  }
+
+  private normalizeInOdcReferential(referential: InOdcReferential) {
+    return {
+      id: referential.id,
+      inOdcId: referential.id,
+      nom: referential.name,
+      description: referential.description ?? null,
+      createdAt: referential.createdAt ?? null,
+      updatedAt: referential.updatedAt ?? null,
+      capacite: referential.capacity,
+      numberOfSessions: referential.numberOfSessions,
+      sessionLength: referential.sessionLength ?? null,
+      photoUrl: referential.photoUrl ?? null,
+    };
+  }
+
+  private compareMasterReferentiels(
+    left: ReturnType<ReferentielsService['normalizeInOdcReferential']>,
+    right: ReturnType<ReferentielsService['normalizeInOdcReferential']>,
+    query: ReferentielsQueryDto,
+  ) {
+    const sortBy = query.sortBy ?? 'createdAt';
+    const sortOrder = query.sortOrder ?? 'desc';
+
+    let comparison = 0;
+
+    if (sortBy === 'nom') {
+      comparison = left.nom.localeCompare(right.nom, 'fr', {
+        sensitivity: 'base',
+      });
+    } else {
+      comparison =
+        new Date(left.createdAt ?? 0).getTime() -
+        new Date(right.createdAt ?? 0).getTime();
+    }
+
+    return sortOrder === 'asc' ? comparison : comparison * -1;
   }
 }

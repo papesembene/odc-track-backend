@@ -18,6 +18,7 @@ import { DocumentsModule } from './documents/documents.module';
 import { StatistiquesModule } from './statistiques/statistiques.module';
 import { CoachesModule } from './coaches/coaches.module';
 import { CommonModule } from './common/common.module';
+import { InOdcModule } from './integrations/in-odc/in-odc.module';
 
 @Module({
   imports: [
@@ -25,6 +26,7 @@ import { CommonModule } from './common/common.module';
       isGlobal: true,
     }),
     CommonModule,
+    InOdcModule,
     PrismaModule,
 
     AuthModule,

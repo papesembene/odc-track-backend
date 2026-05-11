@@ -5,6 +5,12 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { Prisma } from '@prisma/client';
+import { InOdcClientService } from 'src/integrations/in-odc/in-odc-client.service';
+import {
+  InOdcReferenceLearner,
+  InOdcPromotion,
+  InOdcReferential,
+} from 'src/integrations/in-odc/in-odc.types';
 import {
   PROMOTIONS_ERRORS,
   REFERENTIELS_ERRORS,
@@ -12,33 +18,6 @@ import {
 import { CacheVersionService } from 'src/common/services/cache-version.service';
 import { StatistiquesGlobalesQueryDto } from './dto/statistiques-globales-query.dto';
 import { StatistiquesPeriodeQueryDto } from './dto/statistiques-periode-query.dto';
-
-type PromotionStatsRow = Prisma.PromotionGetPayload<{
-  select: {
-    id: true;
-    nom: true;
-    _count: { select: { apprenants: true } };
-  };
-}>;
-
-type ReferentielStatsRow = Prisma.ReferentielGetPayload<{
-  select: {
-    id: true;
-    nom: true;
-    _count: { select: { apprenants: true } };
-  };
-}>;
-
-type EmploiDistinctRow = Prisma.SituationProfessionnelleGetPayload<{
-  select: {
-    apprenant: {
-      select: {
-        promotionId: true;
-        referentielId: true;
-      };
-    };
-  };
-}>;
 
 @Injectable()
 export class StatistiquesService {
@@ -54,6 +33,7 @@ export class StatistiquesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly cacheVersionService: CacheVersionService,
+    private readonly inOdcClientService: InOdcClientService,
   ) {}
 
   // ============================================
@@ -190,157 +170,138 @@ export class StatistiquesService {
       return cachedData;
     }
 
-    const filter = promotionId ? { promotionId } : {};
-    const situationsWhere = promotionId ? { apprenant: { promotionId } } : {};
     const includePromotions = options.includePromotions !== false;
     const includeReferentiels = options.includeReferentiels !== false;
     const includeSituationsRecentes =
       options.includeSituationsRecentes !== false;
-    const promotionsPromise: Promise<PromotionStatsRow[]> = includePromotions
-      ? this.prisma.promotion.findMany({
-          ...(promotionId ? { where: { id: promotionId } } : {}),
-          select: {
-            id: true,
-            nom: true,
-            _count: { select: { apprenants: true } },
-          },
-        })
-      : Promise.resolve([]);
-    const referentielsPromise: Promise<ReferentielStatsRow[]> =
-      includeReferentiels
-        ? this.prisma.referentiel.findMany({
-            ...(promotionId
-              ? { where: { apprenants: { some: { promotionId } } } }
-              : {}),
-            select: {
-              id: true,
-              nom: true,
-              _count: {
-                select: {
-                  apprenants: promotionId ? { where: { promotionId } } : true,
-                },
-              },
-            },
-          })
-        : Promise.resolve([]);
-    const emploisDistinctsPromise: Promise<EmploiDistinctRow[]> =
-      includePromotions || includeReferentiels
-        ? this.prisma.situationProfessionnelle.findMany({
-            where: {
-              statut: 'EN_EMPLOI',
-              ...(promotionId ? { apprenant: { promotionId } } : {}),
-            },
-            distinct: ['apprenantId'],
-            select: {
-              apprenant: {
-                select: {
-                  promotionId: true,
-                  referentielId: true,
-                },
-              },
-            },
-          })
-        : Promise.resolve([]);
+    const result = await this.buildMasterGlobalStats({
+      promotionId,
+      includePromotions,
+      includeReferentiels,
+      includeSituationsRecentes,
+    });
 
-    const [
-      totalApprenants,
-      parStatut,
-      enEmploi,
-      totalSituations,
-      enAttente,
-      validees,
-      situationsRecentes,
-      promotions,
-      referentiels,
-      emploisDistincts,
-    ] = await Promise.all([
-      promotionId
-        ? this.prisma.apprenant.count({ where: { promotionId } })
-        : this.prisma.apprenant.count(),
-      this.getParStatut(filter),
-      this.countEnEmploi(filter),
-      this.prisma.situationProfessionnelle.count({ where: situationsWhere }),
-      this.prisma.situationProfessionnelle.count({
-        where: { ...situationsWhere, valide: false },
+    this.setCachedGlobalStats(cacheKey, result);
+
+    return result;
+  }
+
+  private async buildMasterGlobalStats(options: {
+    promotionId?: string;
+    includePromotions: boolean;
+    includeReferentiels: boolean;
+    includeSituationsRecentes: boolean;
+  }) {
+    const [learners, promotions, referentials] = await Promise.all([
+      this.inOdcClientService.getAllReferenceLearners({
+        promotionId: options.promotionId,
       }),
-      this.prisma.situationProfessionnelle.count({
-        where: { ...situationsWhere, valide: true },
-      }),
-      includeSituationsRecentes
-        ? this.prisma.situationProfessionnelle.findMany({
-            where: situationsWhere,
-            orderBy: { createdAt: 'desc' },
-            take: 5,
-            select: {
-              id: true,
-              statut: true,
-              createdAt: true,
-              valide: true,
-              apprenant: {
-                select: { user: { select: { nom: true, prenom: true } } },
-              },
-            },
-          })
-        : Promise.resolve([]),
-      promotionsPromise,
-      referentielsPromise,
-      emploisDistinctsPromise,
+      options.includePromotions
+        ? this.inOdcClientService.getPromotions()
+        : Promise.resolve([] as InOdcPromotion[]),
+      options.includeReferentiels
+        ? this.inOdcClientService.getReferentials()
+        : Promise.resolve([] as InOdcReferential[]),
     ]);
 
-    const tauxInsertion = this.calcTaux(totalApprenants, enEmploi);
+    const localApprenants = await this.findLocalApprenantsForMasterLearners(
+      learners,
+    );
+    const localByIdentity = this.indexLocalApprenantsByIdentity(localApprenants);
+    const masterWithLocal = learners.map((learner) => ({
+      learner,
+      local:
+        localByIdentity.get(
+          `email:${learner.user.email.trim().toLowerCase()}`,
+        ) ??
+        (learner.phone?.trim()
+          ? localByIdentity.get(`phone:${learner.phone.trim()}`)
+          : undefined) ??
+        null,
+    }));
 
-    const emploiParPromotion = new Map<string, number>();
-    const emploiParReferentiel = new Map<string, number>();
+    const totalApprenants = learners.length;
+    const totalSituations = masterWithLocal.reduce(
+      (sum, item) => sum + (item.local?.situations.length ?? 0),
+      0,
+    );
+    const validees = masterWithLocal.reduce(
+      (sum, item) =>
+        sum +
+        (item.local?.situations.filter((situation) => situation.valide).length ??
+          0),
+      0,
+    );
+    const enAttente = totalSituations - validees;
 
-    for (const row of emploisDistincts) {
-      const apprenant = row.apprenant;
-      if (!apprenant) {
-        continue;
+    const parStatut = {
+      EN_EMPLOI: 0,
+      EN_STAGE: 0,
+      RECHERCHE_EMPLOI: 0,
+      PROJET_PERSO: 0,
+      POURSUITE_ETUDES: 0,
+    };
+    const emploiLearnerIds = new Set<string>();
+
+    for (const item of masterWithLocal) {
+      const situations = item.local?.situations ?? [];
+
+      for (const situation of situations) {
+        if (situation.statut in parStatut) {
+          parStatut[situation.statut as keyof typeof parStatut] += 1;
+        }
+
+        if (situation.statut === 'EN_EMPLOI') {
+          emploiLearnerIds.add(item.learner.id);
+        }
       }
-
-      emploiParPromotion.set(
-        apprenant.promotionId,
-        (emploiParPromotion.get(apprenant.promotionId) ?? 0) + 1,
-      );
-      emploiParReferentiel.set(
-        apprenant.referentielId,
-        (emploiParReferentiel.get(apprenant.referentielId) ?? 0) + 1,
-      );
     }
 
-    const parPromotion = includePromotions
-      ? promotions.map((promotion) => {
-          const total = promotion._count.apprenants;
-          const totalEnEmploi = emploiParPromotion.get(promotion.id) ?? 0;
-          const taux = total > 0 ? (totalEnEmploi / total) * 100 : 0;
-          let statut = 'En cours';
+    const enEmploi = emploiLearnerIds.size;
+    const tauxInsertion = this.calcTaux(totalApprenants, enEmploi);
 
-          if (taux >= 100) {
-            statut = 'Terminée';
-          } else if (taux >= 50) {
-            statut = 'En finale';
-          }
-
-          return {
-            promotionId: promotion.id,
-            promotionNom: promotion.nom,
-            total,
-            enEmploi: totalEnEmploi,
-            statut,
-          };
-        })
+    const parPromotion = options.includePromotions
+      ? this.buildMasterPromotionStats(
+          promotions,
+          masterWithLocal,
+          options.promotionId,
+          emploiLearnerIds,
+        )
       : [];
 
-    const parReferentiel = includeReferentiels
-      ? referentiels.map((referentiel) => ({
-          referentielId: referentiel.id,
-          referentielNom: referentiel.nom,
-          total: referentiel._count.apprenants,
-          enEmploi: emploiParReferentiel.get(referentiel.id) ?? 0,
-        }))
+    const parReferentiel = options.includeReferentiels
+      ? this.buildMasterReferentialStats(
+          referentials,
+          masterWithLocal,
+          emploiLearnerIds,
+        )
       : [];
 
-    const result = {
+    const situationsRecentes = options.includeSituationsRecentes
+      ? masterWithLocal
+          .flatMap((item) =>
+            (item.local?.situations ?? []).map((situation) => ({
+              id: situation.id,
+              statut: situation.statut,
+              createdAt: situation.createdAt,
+              valide: situation.valide,
+              apprenant: {
+                user: {
+                  nom: item.learner.lastName,
+                  prenom: item.learner.firstName,
+                },
+              },
+            })),
+          )
+          .sort(
+            (left, right) =>
+              new Date(right.createdAt).getTime() -
+              new Date(left.createdAt).getTime(),
+          )
+          .slice(0, 5)
+      : [];
+
+    return {
       totalApprenants,
       totalSituations,
       enAttente,
@@ -351,10 +312,183 @@ export class StatistiquesService {
       parPromotion,
       parReferentiel,
     };
+  }
 
-    this.setCachedGlobalStats(cacheKey, result);
+  private async findLocalApprenantsForMasterLearners(
+    learners: InOdcReferenceLearner[],
+  ) {
+    const emails = Array.from(
+      new Set(
+        learners
+          .map((learner) => learner.user.email?.trim().toLowerCase())
+          .filter((value): value is string => Boolean(value)),
+      ),
+    );
+    const phones = Array.from(
+      new Set(
+        learners
+          .map((learner) => learner.phone?.trim())
+          .filter((value): value is string => Boolean(value)),
+      ),
+    );
+
+    const orConditions: Prisma.ApprenantWhereInput[] = [];
+
+    if (emails.length > 0) {
+      orConditions.push({
+        user: {
+          email: {
+            in: emails,
+          },
+        },
+      });
+    }
+
+    if (phones.length > 0) {
+      orConditions.push({
+        telephone: {
+          in: phones,
+        },
+      });
+    }
+
+    if (orConditions.length === 0) {
+      return [];
+    }
+
+    return this.prisma.apprenant.findMany({
+      where: {
+        OR: orConditions,
+      },
+      select: {
+        telephone: true,
+        user: {
+          select: {
+            email: true,
+          },
+        },
+        situations: {
+          select: {
+            id: true,
+            statut: true,
+            createdAt: true,
+            valide: true,
+          },
+        },
+      },
+    });
+  }
+
+  private indexLocalApprenantsByIdentity(
+    apprenants: Array<{
+      telephone: string | null;
+      user: { email: string };
+      situations: Array<{
+        id: string;
+        statut: string;
+        createdAt: Date;
+        valide: boolean;
+      }>;
+    }>,
+  ) {
+    const result = new Map<string, (typeof apprenants)[number]>();
+
+    for (const apprenant of apprenants) {
+      result.set(`email:${apprenant.user.email.trim().toLowerCase()}`, apprenant);
+
+      if (apprenant.telephone?.trim()) {
+        result.set(`phone:${apprenant.telephone.trim()}`, apprenant);
+      }
+    }
 
     return result;
+  }
+
+  private buildMasterPromotionStats(
+    promotions: InOdcPromotion[],
+    masterWithLocal: Array<{
+      learner: InOdcReferenceLearner;
+      local: {
+        situations: Array<{
+          statut: string;
+          createdAt: Date;
+          id: string;
+          valide: boolean;
+        }>;
+      } | null;
+    }>,
+    promotionId: string | undefined,
+    emploiLearnerIds: Set<string>,
+  ) {
+    const learnersByPromotion = new Map<string, number>();
+
+    for (const item of masterWithLocal) {
+      const id = item.learner.promotion.id;
+      learnersByPromotion.set(id, (learnersByPromotion.get(id) ?? 0) + 1);
+    }
+
+    return promotions
+      .filter((promotion) => !promotionId || promotion.id === promotionId)
+      .map((promotion) => {
+        const total = learnersByPromotion.get(promotion.id) ?? 0;
+        const enEmploi = masterWithLocal.filter(
+          (item) =>
+            item.learner.promotion.id === promotion.id &&
+            emploiLearnerIds.has(item.learner.id),
+        ).length;
+
+        return {
+          promotionId: promotion.id,
+          promotionNom: promotion.name,
+          total,
+          enEmploi,
+          statut: promotion.status,
+        };
+      });
+  }
+
+  private buildMasterReferentialStats(
+    referentials: InOdcReferential[],
+    masterWithLocal: Array<{
+      learner: InOdcReferenceLearner;
+      local: {
+        situations: Array<{
+          statut: string;
+          createdAt: Date;
+          id: string;
+          valide: boolean;
+        }>;
+      } | null;
+    }>,
+    emploiLearnerIds: Set<string>,
+  ) {
+    const learnersByReferential = new Map<string, number>();
+
+    for (const item of masterWithLocal) {
+      const referentialId = item.learner.referential?.id;
+
+      if (!referentialId) {
+        continue;
+      }
+
+      learnersByReferential.set(
+        referentialId,
+        (learnersByReferential.get(referentialId) ?? 0) + 1,
+      );
+    }
+
+    return referentials
+      .filter((referential) => learnersByReferential.has(referential.id))
+      .map((referential) => ({
+        referentielId: referential.id,
+        referentielNom: referential.name,
+        total: learnersByReferential.get(referential.id) ?? 0,
+        enEmploi: masterWithLocal.filter(
+          (item) =>
+            item.learner.referential?.id === referential.id &&
+            emploiLearnerIds.has(item.learner.id),
+        ).length,
+      }));
   }
 
   /** Stats par promotion */

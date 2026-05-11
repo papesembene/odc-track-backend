@@ -9,6 +9,7 @@ type ImportMode = 'by_promotion' | 'by_referentiel';
 @Injectable()
 export class ApprenantRowValidatorService {
   readonly requiredHeaders = ['nom', 'prenom', 'email', 'genre', 'adresse'];
+  readonly historicalRequiredHeaders = ['prenom', 'nom', 'telephone', 'email'];
 
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   getMissingHeaders(headers: string[], _mode: ImportMode): string[] {
@@ -31,6 +32,20 @@ export class ApprenantRowValidatorService {
 
     // Plus besoin de vérifier promotion/referentiel dans le fichier
     // car l'utilisateur les sélectionne déjà dans l'interface
+
+    return null;
+  }
+
+  getMissingHistoricalHeaders(headers: string[]): string[] {
+    return this.historicalRequiredHeaders.filter(
+      (header) => !headers.includes(header),
+    );
+  }
+
+  validateHistoricalRequiredFields(row: ImportRow): string | null {
+    if (!row.prenom || !row.nom || !row.telephone || !row.email) {
+      return 'Champs obligatoires invalides (prenom, nom, telephone, email)';
+    }
 
     return null;
   }
