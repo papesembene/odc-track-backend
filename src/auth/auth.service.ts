@@ -288,10 +288,6 @@ export class AuthService {
         throw error;
       }
 
-      if ((error as any)?.status === 401) {
-        throw new UnauthorizedException(AUTH_ERROR.UNAUTHORIZED.message);
-      }
-
       this.logger.error(
         'Echec de connexion apprenant via in-odc',
         error instanceof Error ? error.stack : String(error),
@@ -394,7 +390,9 @@ export class AuthService {
       referentielId: learner.referential.id,
       promotionId: learner.promotion.id,
       telephone: learner.phone,
-      dateNaissance: learner.birthDate ? new Date(learner.birthDate) : undefined,
+      dateNaissance: learner.birthDate
+        ? new Date(learner.birthDate)
+        : undefined,
       genre:
         learner.gender === 'MALE'
           ? 'M'

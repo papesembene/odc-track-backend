@@ -145,10 +145,10 @@ export class ApprenantsController {
 
     const data = isCsv
       ? await this.importService.importHistoricalCsv(
-        file.buffer.toString('utf-8'),
-        promotionName,
-        referentialName,
-      )
+          file.buffer.toString('utf-8'),
+          promotionName,
+          referentialName,
+        )
       : await (() => {
           const { headers, rows } = this.excelParser.parse(file.buffer);
           return this.importService.importHistoricalRows(

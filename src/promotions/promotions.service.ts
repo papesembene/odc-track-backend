@@ -48,7 +48,8 @@ export class PromotionsService {
     private readonly inOdcClientService: InOdcClientService,
   ) {}
 
-  async create(dto: CreatePromotionDto) {
+  create(dto: CreatePromotionDto): never {
+    void dto;
     throw new ForbiddenException(
       'Les promotions sont gerees dans in-odc. La creation locale est desactivee dans Suivi insertion.',
     );
@@ -136,9 +137,8 @@ export class PromotionsService {
     const relevantLearners = masterLearners.filter((learner) =>
       filteredPromotionIds.has(learner.promotion.id),
     );
-    const emploiByPromotion = await this.buildMasterPromotionEmploymentMap(
-      relevantLearners,
-    );
+    const emploiByPromotion =
+      await this.buildMasterPromotionEmploymentMap(relevantLearners);
     const learnersCountByPromotion = new Map<string, number>();
 
     for (const learner of relevantLearners) {
@@ -186,7 +186,7 @@ export class PromotionsService {
     return item;
   }
 
-  async update(id: string, dto: UpdatePromotionDto) {
+  update(id: string, dto: UpdatePromotionDto): never {
     void id;
     void dto;
     throw new ForbiddenException(
@@ -194,7 +194,7 @@ export class PromotionsService {
     );
   }
 
-  async remove(id: string) {
+  remove(id: string): never {
     void id;
     throw new ForbiddenException(
       'Les promotions sont gerees dans in-odc. La suppression locale est desactivee dans Suivi insertion.',
@@ -205,7 +205,7 @@ export class PromotionsService {
    * Active une promotion et désactive automatiquement toutes les autres
    * (une seule promotion peut être active à la fois)
    */
-  async setActive(id: string) {
+  setActive(id: string): never {
     void id;
     throw new ForbiddenException(
       "L'activation de promotion se fait dans in-odc. Cette action est desactivee dans Suivi insertion.",
@@ -401,7 +401,8 @@ export class PromotionsService {
       comparison = left.annee - right.annee;
     } else {
       comparison =
-        new Date(left.dateDebut).getTime() - new Date(right.dateDebut).getTime();
+        new Date(left.dateDebut).getTime() -
+        new Date(right.dateDebut).getTime();
     }
 
     return sortOrder === 'asc' ? comparison : comparison * -1;

@@ -31,7 +31,7 @@ export class ReferentielsService {
     updatedAt: true,
   } as const;
 
-  async create(dto: CreateReferentielDto) {
+  create(dto: CreateReferentielDto): never {
     void dto;
     throw new ForbiddenException(
       'Les referentiels sont geres dans in-odc. La creation locale est desactivee dans Suivi insertion.',
@@ -88,7 +88,9 @@ export class ReferentielsService {
           (referential.description ?? '').toLowerCase().includes(search)
         );
       })
-      .sort((left, right) => this.compareMasterReferentiels(left, right, query));
+      .sort((left, right) =>
+        this.compareMasterReferentiels(left, right, query),
+      );
 
     const totalItems = filteredItems.length;
     const start = (page - 1) * limit;
@@ -110,7 +112,7 @@ export class ReferentielsService {
     return item;
   }
 
-  async update(id: string, dto: UpdateReferentielDto) {
+  update(id: string, dto: UpdateReferentielDto): never {
     void id;
     void dto;
     throw new ForbiddenException(
@@ -118,7 +120,7 @@ export class ReferentielsService {
     );
   }
 
-  async remove(id: string) {
+  remove(id: string): never {
     void id;
     throw new ForbiddenException(
       'Les referentiels sont geres dans in-odc. La suppression locale est desactivee dans Suivi insertion.',

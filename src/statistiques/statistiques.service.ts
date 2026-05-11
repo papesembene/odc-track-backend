@@ -204,10 +204,10 @@ export class StatistiquesService {
         : Promise.resolve([] as InOdcReferential[]),
     ]);
 
-    const localApprenants = await this.findLocalApprenantsForMasterLearners(
-      learners,
-    );
-    const localByIdentity = this.indexLocalApprenantsByIdentity(localApprenants);
+    const localApprenants =
+      await this.findLocalApprenantsForMasterLearners(learners);
+    const localByIdentity =
+      this.indexLocalApprenantsByIdentity(localApprenants);
     const masterWithLocal = learners.map((learner) => ({
       learner,
       local:
@@ -228,8 +228,8 @@ export class StatistiquesService {
     const validees = masterWithLocal.reduce(
       (sum, item) =>
         sum +
-        (item.local?.situations.filter((situation) => situation.valide).length ??
-          0),
+        (item.local?.situations.filter((situation) => situation.valide)
+          .length ?? 0),
       0,
     );
     const enAttente = totalSituations - validees;
@@ -394,7 +394,10 @@ export class StatistiquesService {
     const result = new Map<string, (typeof apprenants)[number]>();
 
     for (const apprenant of apprenants) {
-      result.set(`email:${apprenant.user.email.trim().toLowerCase()}`, apprenant);
+      result.set(
+        `email:${apprenant.user.email.trim().toLowerCase()}`,
+        apprenant,
+      );
 
       if (apprenant.telephone?.trim()) {
         result.set(`phone:${apprenant.telephone.trim()}`, apprenant);

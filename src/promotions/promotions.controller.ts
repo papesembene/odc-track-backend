@@ -31,8 +31,8 @@ export class PromotionsController {
   @Post()
   @Roles(ROLE.ADMIN, ROLE.MANAGER)
   @HttpCode(HttpStatus.CREATED)
-  async create(@Body() dto: CreatePromotionDto) {
-    const data = await this.service.create(dto);
+  create(@Body() dto: CreatePromotionDto) {
+    const data = this.service.create(dto);
     return ResponseHelper.success(data, 'Promotion créée avec succès');
   }
 
@@ -73,15 +73,15 @@ export class PromotionsController {
 
   @Put(':id')
   @Roles(ROLE.ADMIN, ROLE.MANAGER)
-  async update(@Param('id') id: string, @Body() dto: UpdatePromotionDto) {
-    const data = await this.service.update(id, dto);
+  update(@Param('id') id: string, @Body() dto: UpdatePromotionDto) {
+    const data = this.service.update(id, dto);
     return ResponseHelper.success(data, 'Promotion modifiée avec succès');
   }
 
   @Delete(':id')
   @Roles(ROLE.ADMIN, ROLE.MANAGER)
-  async remove(@Param('id') id: string) {
-    const data = await this.service.remove(id);
+  remove(@Param('id') id: string) {
+    const data = this.service.remove(id);
     return ResponseHelper.success(data);
   }
 
@@ -91,8 +91,8 @@ export class PromotionsController {
    */
   @Post(':id/activate')
   @Roles(ROLE.MANAGER, ROLE.ADMIN)
-  async setActive(@Param('id') id: string) {
-    const data = await this.service.setActive(id);
+  setActive(@Param('id') id: string) {
+    const data = this.service.setActive(id);
     return ResponseHelper.success(data, 'Promotion activée avec succès');
   }
 }

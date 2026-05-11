@@ -260,7 +260,8 @@ export class CoachesService {
     };
   }
 
-  async create(_data: CreateCoachDto) {
+  create(data: CreateCoachDto): never {
+    void data;
     throw new ForbiddenException(
       'Les coaches sont geres dans in-odc. La creation locale est desactivee dans Suivi insertion.',
     );

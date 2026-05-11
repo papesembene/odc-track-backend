@@ -540,7 +540,7 @@ export class SituationsService {
     const pendingWhere = this.buildSituationsWhere({
       ...query,
       valide: false,
-        promotionId,
+      promotionId,
     });
 
     const [items, totalItems] = await this.prisma.$transaction([

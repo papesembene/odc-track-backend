@@ -169,7 +169,7 @@ export class ApprenantsService {
 
     return {
       items: response.items.map((item) => ({
-        ...(this.mapSituationSummaryForMasterLearner(item, situationsByIdentity)),
+        ...this.mapSituationSummaryForMasterLearner(item, situationsByIdentity),
         id: item.id,
         inOdcId: item.id,
         telephone: item.phone,
@@ -536,9 +536,7 @@ export class ApprenantsService {
   }
 
   private async findLocalApprenantForMasterData(email: string, phone?: string) {
-    const orConditions: Prisma.ApprenantWhereInput[] = [
-      { user: { email } },
-    ];
+    const orConditions: Prisma.ApprenantWhereInput[] = [{ user: { email } }];
 
     if (phone) {
       orConditions.push({ telephone: phone });

@@ -313,17 +313,19 @@ export class ApprenantsImportService {
       ['Colonnes obligatoires'],
       ['prenom, nom, telephone, email'],
       ['Selection avant import'],
-      ['Choisir une seule promotion historique et un seul referentiel avant de charger le fichier.'],
+      [
+        'Choisir une seule promotion historique et un seul referentiel avant de charger le fichier.',
+      ],
       ['Formats de date acceptes'],
       ['YYYY-MM-DD, JJ/MM/AAAA, JJ-MM-AAAA'],
       ['Valeurs conseillees pour sexe'],
       ['M ou F'],
       ['Valeurs conseillees pour statut_insertion'],
-      [
-        'En emploi, En stage, Projet perso, Poursuite etudes, Recherche emploi',
-      ],
+      ['En emploi, En stage, Projet perso, Poursuite etudes, Recherche emploi'],
       ['Important'],
-      ["Si le nom de la promotion existe deja dans in-odc, l'import est refuse."],
+      [
+        "Si le nom de la promotion existe deja dans in-odc, l'import est refuse.",
+      ],
     ]);
     consignesSheet.getColumn(1).width = 110;
     consignesSheet.getRow(1).font = { bold: true };
@@ -851,7 +853,11 @@ export class ApprenantsImportService {
     const entrepriseAdresse = this.normalizeDisplayText(row.adresse_entreprise);
     const poste = this.normalizeDisplayText(row.poste);
     const typeContrat = this.normalizeDisplayText(row.type_contrat);
-    const commentaire = [poste, typeContrat, this.normalizeDisplayText(row.commentaire)]
+    const commentaire = [
+      poste,
+      typeContrat,
+      this.normalizeDisplayText(row.commentaire),
+    ]
       .filter(Boolean)
       .join(' | ');
 
@@ -906,7 +912,8 @@ export class ApprenantsImportService {
   private async ensurePromotionIsHistorical(name: string) {
     const masterPromotions = await this.inOdcClientService.getPromotions();
     const existsInMasterData = masterPromotions.some(
-      (promotion) => this.normalizeText(promotion.name) === this.normalizeText(name),
+      (promotion) =>
+        this.normalizeText(promotion.name) === this.normalizeText(name),
     );
 
     if (existsInMasterData) {
@@ -917,8 +924,7 @@ export class ApprenantsImportService {
   }
 
   private async ensureReferentialIsHistorical(name: string) {
-    const masterReferentials =
-      await this.inOdcClientService.getReferentials();
+    const masterReferentials = await this.inOdcClientService.getReferentials();
     const existsInMasterData = masterReferentials.some(
       (referential) =>
         this.normalizeText(referential.name) === this.normalizeText(name),
@@ -926,7 +932,7 @@ export class ApprenantsImportService {
 
     if (existsInMasterData) {
       throw new BadRequestException(
-        "Ce referentiel est deja gere dans in-odc. Utilisez l import historique seulement pour des promotions absentes du master-data.",
+        'Ce referentiel est deja gere dans in-odc. Utilisez l import historique seulement pour des promotions absentes du master-data.',
       );
     }
   }
@@ -992,9 +998,7 @@ export class ApprenantsImportService {
       return STATUT.PROJET_PERSO;
     }
 
-    if (
-      ['recherche emploi', 'cherche emploi', 'sans emploi'].includes(value)
-    ) {
+    if (['recherche emploi', 'cherche emploi', 'sans emploi'].includes(value)) {
       return STATUT.RECHERCHE_EMPLOI;
     }
 
