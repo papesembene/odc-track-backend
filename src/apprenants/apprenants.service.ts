@@ -105,51 +105,67 @@ export class ApprenantsService {
 
     const where = this.buildApprenantsWhere(query);
 
-    const [items, totalItems] = await this.prisma.$transaction([
-      this.prisma.apprenant.findMany({
-        where,
-        skip,
-        take: limit,
-        include: {
-          user: {
-            select: {
-              id: true,
-              nom: true,
-              prenom: true,
-              email: true,
-              role: true,
-              actif: true,
+    const [items, totalItems, totalWithSituations] =
+      await this.prisma.$transaction([
+        this.prisma.apprenant.findMany({
+          where,
+          skip,
+          take: limit,
+          include: {
+            user: {
+              select: {
+                id: true,
+                nom: true,
+                prenom: true,
+                email: true,
+                role: true,
+                actif: true,
+              },
+            },
+            referentiel: true,
+            promotion: true,
+            _count: {
+              select: {
+                situations: true,
+              },
+            },
+            situations: {
+              where: {
+                valide: true,
+              },
+              select: {
+                valide: true,
+              },
+              take: 1,
             },
           },
-          referentiel: true,
-          promotion: true,
-          _count: {
-            select: {
-              situations: true,
+          orderBy: { [sortBy]: sortOrder },
+        }),
+        this.prisma.apprenant.count({ where }),
+        this.prisma.apprenant.count({
+          where: {
+            ...where,
+            situations: {
+              some: {},
             },
           },
-          situations: {
-            where: {
-              valide: true,
-            },
-            select: {
-              valide: true,
-            },
-            take: 1,
-          },
-        },
-        orderBy: { [sortBy]: sortOrder },
-      }),
-      this.prisma.apprenant.count({ where }),
-    ]);
+        }),
+      ]);
 
     return {
       items,
       pagination: buildPaginationMeta(page, limit, totalItems),
+      summary: {
+        totalWithSituations,
+      },
     };
   }
 
   async findAllFromInOdc(query: ApprenantsQueryDto) {
+    if (await this.isHistoricalPromotionSelection(query.promotionId)) {
+      return this.findAllHistorical(query);
+    }
+
     const { page, limit } = normalizePagination(query);
     const masterQuery = {
       search: query.search,
@@ -208,6 +224,68 @@ export class ApprenantsService {
         totalWithSituations: Array.from(situationsByIdentity.values()).filter(
           (count) => count > 0,
         ).length,
+      },
+    };
+  }
+
+  private async findAllHistorical(query: ApprenantsQueryDto) {
+    const { page, limit, skip } = normalizePagination(query);
+    const sortBy = query.sortBy ?? 'createdAt';
+    const sortOrder = query.sortOrder ?? 'desc';
+    const where = await this.buildHistoricalApprenantsWhere(query);
+
+    const [items, totalItems, totalWithSituations] =
+      await this.prisma.$transaction([
+        this.prisma.apprenant.findMany({
+          where,
+          skip,
+          take: limit,
+          include: {
+            user: {
+              select: {
+                id: true,
+                nom: true,
+                prenom: true,
+                email: true,
+                role: true,
+                actif: true,
+              },
+            },
+            referentiel: true,
+            promotion: true,
+            _count: {
+              select: {
+                situations: true,
+              },
+            },
+            situations: {
+              where: {
+                valide: true,
+              },
+              select: {
+                valide: true,
+              },
+              take: 1,
+            },
+          },
+          orderBy: { [sortBy]: sortOrder },
+        }),
+        this.prisma.apprenant.count({ where }),
+        this.prisma.apprenant.count({
+          where: {
+            ...where,
+            situations: {
+              some: {},
+            },
+          },
+        }),
+      ]);
+
+    return {
+      items,
+      pagination: buildPaginationMeta(page, limit, totalItems),
+      summary: {
+        totalWithSituations,
       },
     };
   }
@@ -755,6 +833,91 @@ export class ApprenantsService {
           }
         : {}),
     };
+  }
+
+  private async buildHistoricalApprenantsWhere(
+    query: ApprenantsQueryDto,
+  ): Promise<Prisma.ApprenantWhereInput> {
+    let referentielIds: string[] | undefined;
+
+    if (query.referentielId) {
+      const masterReferentials =
+        await this.inOdcClientService.getReferentials();
+      const selectedMasterReferential = masterReferentials.find(
+        (item) => item.id === query.referentielId,
+      );
+
+      if (selectedMasterReferential) {
+        const localReferentials = await this.prisma.referentiel.findMany({
+          where: {
+            nom: {
+              equals: selectedMasterReferential.name,
+              mode: 'insensitive',
+            },
+          },
+          select: { id: true },
+        });
+
+        referentielIds = localReferentials.map((item) => item.id);
+      } else {
+        referentielIds = [query.referentielId];
+      }
+    }
+
+    return {
+      ...(query.genre ? { genre: query.genre } : {}),
+      ...(referentielIds
+        ? {
+            referentielId:
+              referentielIds.length === 1
+                ? referentielIds[0]
+                : { in: referentielIds },
+          }
+        : {}),
+      ...(query.promotionId ? { promotionId: query.promotionId } : {}),
+      ...(query.search
+        ? {
+            OR: [
+              {
+                user: {
+                  nom: { contains: query.search, mode: 'insensitive' },
+                },
+              },
+              {
+                user: {
+                  prenom: { contains: query.search, mode: 'insensitive' },
+                },
+              },
+              {
+                user: {
+                  email: { contains: query.search, mode: 'insensitive' },
+                },
+              },
+              { telephone: { contains: query.search, mode: 'insensitive' } },
+            ],
+          }
+        : {}),
+    };
+  }
+
+  private async isHistoricalPromotionSelection(promotionId?: string) {
+    if (!promotionId) {
+      return false;
+    }
+
+    const [localPromotion, masterPromotions] = await Promise.all([
+      this.prisma.promotion.findUnique({
+        where: { id: promotionId },
+        select: { id: true },
+      }),
+      this.inOdcClientService.getPromotions(),
+    ]);
+
+    if (!localPromotion) {
+      return false;
+    }
+
+    return !masterPromotions.some((promotion) => promotion.id === promotionId);
   }
 
   async updateMe(userId: string, dto: UpdateApprenantDto) {
