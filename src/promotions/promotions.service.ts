@@ -18,6 +18,31 @@ import {
   normalizePagination,
 } from 'src/common/helpers/pagination.helper';
 
+type MasterPromotionData = {
+  id: string;
+  inOdcId: string | null;
+  nom: string;
+  annee: number;
+  estActive: boolean;
+  statut: string;
+  dateDebut: string | null;
+  dateFin: string | null;
+  photoUrl: string | null;
+  createdAt?: Date | null;
+  updatedAt?: Date | null;
+  referentiels: Array<{
+    referentielId: string;
+    referentiel: {
+      id: string;
+      nom: string;
+      description: string | null;
+    };
+  }>;
+  totalApprenants?: number;
+  enEmploi?: number;
+  tauxInsertion?: number;
+};
+
 @Injectable()
 export class PromotionsService {
   private readonly logger = new Logger(PromotionsService.name);
@@ -100,11 +125,17 @@ export class PromotionsService {
       this.inOdcClientService.getPromotions(),
       this.inOdcClientService.getAllReferenceLearners(),
     ]);
-    const normalizedPromotions = rawPromotions.map((promotion) =>
-      this.normalizeInOdcPromotion(promotion),
+    const normalizedPromotions: MasterPromotionData[] = rawPromotions.map(
+      (promotion) => this.normalizeInOdcPromotion(promotion),
     );
+    const historicalPromotions =
+      await this.getHistoricalLocalPromotions(normalizedPromotions);
+    const allPromotions: MasterPromotionData[] = [
+      ...normalizedPromotions,
+      ...historicalPromotions,
+    ];
 
-    const filteredItems = normalizedPromotions
+    const filteredItems = allPromotions
       .filter((promotion) => {
         if (
           query.search &&
@@ -152,13 +183,19 @@ export class PromotionsService {
     const start = (page - 1) * limit;
     const items = filteredItems.slice(start, start + limit).map((promotion) => {
       const totalApprenants = learnersCountByPromotion.get(promotion.id) ?? 0;
-      const enEmploi = emploiByPromotion.get(promotion.id) ?? 0;
+      const enEmploi =
+        promotion.totalApprenants !== undefined &&
+        promotion.enEmploi !== undefined
+          ? promotion.enEmploi
+          : (emploiByPromotion.get(promotion.id) ?? 0);
 
       return {
         ...promotion,
-        totalApprenants,
+        totalApprenants: promotion.totalApprenants ?? totalApprenants,
         enEmploi,
-        tauxInsertion: this.calcTaux(totalApprenants, enEmploi),
+        tauxInsertion:
+          promotion.tauxInsertion ??
+          this.calcTaux(promotion.totalApprenants ?? totalApprenants, enEmploi),
       };
     });
 
@@ -252,7 +289,9 @@ export class PromotionsService {
     );
   }
 
-  private normalizeInOdcPromotion(promotion: InOdcPromotion) {
+  private normalizeInOdcPromotion(
+    promotion: InOdcPromotion,
+  ): MasterPromotionData {
     return {
       id: promotion.id,
       inOdcId: promotion.id,
@@ -263,6 +302,8 @@ export class PromotionsService {
       dateDebut: promotion.startDate,
       dateFin: promotion.endDate,
       photoUrl: promotion.photoUrl ?? null,
+      createdAt: null,
+      updatedAt: null,
       referentiels: (promotion.referentials ?? []).map((referential) => ({
         referentielId: referential.id,
         referentiel: {
@@ -272,6 +313,79 @@ export class PromotionsService {
         },
       })),
     };
+  }
+
+  private async getHistoricalLocalPromotions(
+    masterPromotions: MasterPromotionData[],
+  ): Promise<MasterPromotionData[]> {
+    const masterPromotionNames = new Set(
+      masterPromotions.map((promotion) => this.normalizeText(promotion.nom)),
+    );
+
+    const localPromotions = await this.prisma.promotion.findMany({
+      include: {
+        referentiels: {
+          select: {
+            referentielId: true,
+            referentiel: {
+              select: {
+                id: true,
+                nom: true,
+                description: true,
+              },
+            },
+          },
+        },
+        apprenants: {
+          select: {
+            id: true,
+            situations: {
+              where: {
+                statut: 'EN_EMPLOI',
+              },
+              select: {
+                id: true,
+              },
+              take: 1,
+            },
+          },
+        },
+      },
+    });
+
+    return localPromotions
+      .filter(
+        (promotion) =>
+          !masterPromotionNames.has(this.normalizeText(promotion.nom)),
+      )
+      .map((promotion) => {
+        const totalApprenants = promotion.apprenants.length;
+        const enEmploi = promotion.apprenants.filter(
+          (apprenant) => apprenant.situations.length > 0,
+        ).length;
+
+        return {
+          id: promotion.id,
+          inOdcId: null,
+          nom: promotion.nom,
+          annee: promotion.annee,
+          dateDebut: null,
+          dateFin: null,
+          photoUrl: null,
+          statut: 'HISTORIQUE',
+          estActive: false,
+          createdAt: promotion.createdAt,
+          updatedAt: promotion.updatedAt,
+          referentiels: promotion.referentiels,
+          totalApprenants,
+          enEmploi,
+          tauxInsertion: this.calcTaux(totalApprenants, enEmploi),
+        };
+      });
+  }
+
+  private normalizeText(value: string) {
+    return value.trim().toLowerCase();
   }
 
   private calcTaux(total: number, enEmploi: number) {
@@ -401,8 +515,8 @@ export class PromotionsService {
       comparison = left.annee - right.annee;
     } else {
       comparison =
-        new Date(left.dateDebut).getTime() -
-        new Date(right.dateDebut).getTime();
+        new Date(left.dateDebut ?? 0).getTime() -
+        new Date(right.dateDebut ?? 0).getTime();
     }
 
     return sortOrder === 'asc' ? comparison : comparison * -1;
