@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { DOCTYPE, Prisma, ROLE, STATUT } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 import { Workbook } from 'exceljs';
@@ -7,6 +7,7 @@ import { PrismaService } from 'src/prisma/prisma.service';
 import { CsvParserService } from './csv-parser.service';
 import { DateParserService } from './date-parser.service';
 import { ApprenantRowValidatorService } from './apprenant-row-validator.service';
+import { EmailService } from 'src/email/email.service';
 import {
   CreatedHistoricalAccount,
   ImportResult,
@@ -19,12 +20,15 @@ import {
  */
 @Injectable()
 export class ApprenantsImportService {
+  private readonly logger = new Logger(ApprenantsImportService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly inOdcClientService: InOdcClientService,
     private readonly csvParser: CsvParserService,
     private readonly dateParser: DateParserService,
     private readonly rowValidator: ApprenantRowValidatorService,
+    private readonly emailService: EmailService,
   ) {}
 
   async importCsv(content: string, promotionId: string): Promise<ImportResult> {
@@ -191,6 +195,8 @@ export class ApprenantsImportService {
     const createdPromotionNames = new Set<string>();
     const createdReferentialNames = new Set<string>();
     const createdAccounts: CreatedHistoricalAccount[] = [];
+    let emailedAccounts = 0;
+    let emailFailures = 0;
     let createdCount = 0;
     let createdSituations = 0;
 
@@ -236,6 +242,23 @@ export class ApprenantsImportService {
         createdSituations += 1;
       }
       createdAccounts.push(rowOutcome.createdAccount);
+
+      try {
+        await this.emailService.sendHistoricalLearnerCredentials({
+          email: rowOutcome.createdAccount.email,
+          firstName: rowOutcome.createdAccount.prenom,
+          lastName: rowOutcome.createdAccount.nom,
+          temporaryPassword: rowOutcome.createdAccount.temporaryPassword,
+        });
+        emailedAccounts += 1;
+      } catch (error) {
+        emailFailures += 1;
+        const message =
+          error instanceof Error ? error.message : 'Erreur email inconnue';
+        this.logger.warn(
+          `Impossible d'envoyer les identifiants a ${rowOutcome.createdAccount.email}: ${message}`,
+        );
+      }
     }
 
     return {
@@ -247,6 +270,8 @@ export class ApprenantsImportService {
       createdReferentiels: createdReferentialNames.size,
       createdSituations,
       createdAccounts,
+      emailedAccounts,
+      emailFailures,
     };
   }
 

@@ -9,9 +9,10 @@ import { ExcelParserService } from './import/excel-parser.service';
 import { PromotionApprenantsImportController } from './promotion-apprenants-import.controller';
 import { ReferentielApprenantsImportController } from './referentiel-apprenants-import.controller';
 import { PromotionsModule } from '../promotions/promotions.module';
+import { EmailModule } from 'src/email/email.module';
 
 @Module({
-  imports: [PromotionsModule],
+  imports: [PromotionsModule, EmailModule],
   controllers: [
     ApprenantsController,
     PromotionApprenantsImportController,
