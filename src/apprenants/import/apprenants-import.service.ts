@@ -104,7 +104,7 @@ export class ApprenantsImportService {
       throw new BadRequestException('Referentiel introuvable');
     }
 
-    await this.ensureReferentialIsHistorical(referentiel.nom);
+    await this.ensureReferentialExistsInMasterData(referentiel.nom);
 
     const missingHeaders = this.rowValidator.getMissingHeaders(
       headers,
@@ -185,6 +185,7 @@ export class ApprenantsImportService {
     }
 
     await this.ensurePromotionIsHistorical(normalizedPromotionName);
+    await this.ensureReferentialExistsInMasterData(normalizedReferentialName);
 
     const errors: RowError[] = [];
     const createdPromotionNames = new Set<string>();
@@ -651,10 +652,8 @@ export class ApprenantsImportService {
           tx,
           promotionName,
         );
-        const referentialOutcome = await this.findOrCreateHistoricalReferential(
-          tx,
-          referentialName,
-        );
+        const referentialOutcome =
+          await this.findOrCreateMasterReferentialMirror(tx, referentialName);
 
         await tx.promotionReferentiel.upsert({
           where: {
@@ -808,7 +807,7 @@ export class ApprenantsImportService {
     };
   }
 
-  private async findOrCreateHistoricalReferential(
+  private async findOrCreateMasterReferentialMirror(
     tx: Prisma.TransactionClient,
     name: string,
   ) {
@@ -823,10 +822,24 @@ export class ApprenantsImportService {
       };
     }
 
+    const masterReferentials = await this.inOdcClientService.getReferentials();
+    const masterReferential = masterReferentials.find(
+      (referential) =>
+        this.normalizeText(referential.name) === this.normalizeText(name),
+    );
+
+    if (!masterReferential) {
+      throw new BadRequestException(
+        'Ce referentiel doit exister dans in-odc avant de pouvoir etre utilise pour un import historique.',
+      );
+    }
+
     const referentiel = await tx.referentiel.create({
       data: {
-        nom: name,
-        description: `Referentiel historique importe depuis le suivi d insertion`,
+        nom: masterReferential.name,
+        description:
+          masterReferential.description ??
+          'Referentiel synchronise depuis in-odc pour l historique',
       },
     });
 
@@ -923,16 +936,16 @@ export class ApprenantsImportService {
     }
   }
 
-  private async ensureReferentialIsHistorical(name: string) {
+  private async ensureReferentialExistsInMasterData(name: string) {
     const masterReferentials = await this.inOdcClientService.getReferentials();
     const existsInMasterData = masterReferentials.some(
       (referential) =>
         this.normalizeText(referential.name) === this.normalizeText(name),
     );
 
-    if (existsInMasterData) {
+    if (!existsInMasterData) {
       throw new BadRequestException(
-        'Ce referentiel est deja gere dans in-odc. Utilisez l import historique seulement pour des promotions absentes du master-data.',
+        'Ce referentiel doit exister dans in-odc pour etre utilise dans un import historique.',
       );
     }
   }
