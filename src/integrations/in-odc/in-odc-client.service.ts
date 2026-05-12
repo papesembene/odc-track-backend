@@ -1,4 +1,6 @@
 import {
+  HttpException,
+  HttpStatus,
   Injectable,
   Logger,
   NotFoundException,
@@ -20,27 +22,39 @@ import {
 @Injectable()
 export class InOdcClientService {
   private readonly logger = new Logger(InOdcClientService.name);
+  private readonly cache = new Map<
+    string,
+    { expiresAt: number; data: unknown }
+  >();
+  private readonly defaultCacheTtlMs = 60_000;
 
   constructor(private readonly configService: ConfigService) {}
 
   async getPromotions(): Promise<InOdcPromotion[]> {
-    return this.getJson<InOdcPromotion[]>('/promotions');
+    return this.getCachedJson<InOdcPromotion[]>('/promotions');
   }
 
   async getActivePromotion(): Promise<InOdcPromotion> {
-    return this.getJson<InOdcPromotion>('/promotions/active/reference');
+    return this.getCachedJson<InOdcPromotion>(
+      '/promotions/active/reference',
+      {},
+      {},
+      60_000,
+    );
   }
 
   async getReferentials(): Promise<InOdcReferential[]> {
-    return this.getJson<InOdcReferential[]>('/referentials/all');
+    return this.getCachedJson<InOdcReferential[]>('/referentials/all');
   }
 
   async getReferenceLearners(
     query: InOdcReferenceLearnersQuery = {},
   ): Promise<InOdcReferenceLearnersResponse> {
-    return this.getJson<InOdcReferenceLearnersResponse>(
+    return this.getCachedJson<InOdcReferenceLearnersResponse>(
       '/learners/reference-list',
       query,
+      {},
+      30_000,
     );
   }
 
@@ -110,11 +124,33 @@ export class InOdcClientService {
   }
 
   async getCoaches(): Promise<InOdcReferenceCoach[]> {
-    const data = await this.getJson<{ items: InOdcReferenceCoach[] }>(
+    const data = await this.getCachedJson<{ items: InOdcReferenceCoach[] }>(
       '/coaches/reference-list',
     );
 
     return data.items;
+  }
+
+  private async getCachedJson<T>(
+    path: string,
+    query: Record<string, string | number | undefined> = {},
+    extraHeaders: Record<string, string> = {},
+    ttlMs = this.defaultCacheTtlMs,
+  ): Promise<T> {
+    const cacheKey = this.buildCacheKey(path, query, extraHeaders);
+    const cached = this.cache.get(cacheKey);
+
+    if (cached && cached.expiresAt > Date.now()) {
+      return cached.data as T;
+    }
+
+    const data = await this.getJson<T>(path, query, extraHeaders);
+    this.cache.set(cacheKey, {
+      data,
+      expiresAt: Date.now() + ttlMs,
+    });
+
+    return data;
   }
 
   private async getJson<T>(
@@ -152,6 +188,13 @@ export class InOdcClientService {
           throw new NotFoundException('Ressource in-odc introuvable');
         }
 
+        if (response.status === 429) {
+          throw new HttpException(
+            'Le service in-odc limite temporairement les requetes',
+            HttpStatus.TOO_MANY_REQUESTS,
+          );
+        }
+
         throw new ServiceUnavailableException(
           'Le service in-odc est indisponible pour le moment',
         );
@@ -159,6 +202,14 @@ export class InOdcClientService {
 
       return (await response.json()) as T;
     } catch (error) {
+      if (
+        error instanceof NotFoundException ||
+        error instanceof HttpException ||
+        error instanceof ServiceUnavailableException
+      ) {
+        throw error;
+      }
+
       if (error instanceof Error && error.name === 'AbortError') {
         this.logger.error(`Timeout appel in-odc: ${url.pathname}`);
         throw new ServiceUnavailableException(
@@ -170,9 +221,6 @@ export class InOdcClientService {
         `Erreur reseau lors de l'appel in-odc ${url.pathname}`,
         error instanceof Error ? error.stack : undefined,
       );
-      if (error instanceof NotFoundException) {
-        throw error;
-      }
       throw new ServiceUnavailableException(
         'Impossible de contacter le service in-odc',
       );
@@ -209,6 +257,13 @@ export class InOdcClientService {
           throw new UnauthorizedException('Email ou mot de passe incorrect');
         }
 
+        if (response.status === 429) {
+          throw new HttpException(
+            'Le service in-odc limite temporairement les requetes',
+            HttpStatus.TOO_MANY_REQUESTS,
+          );
+        }
+
         throw new ServiceUnavailableException(
           'Le service in-odc est indisponible pour le moment',
         );
@@ -216,7 +271,11 @@ export class InOdcClientService {
 
       return (await response.json()) as T;
     } catch (error) {
-      if (error instanceof UnauthorizedException) {
+      if (
+        error instanceof UnauthorizedException ||
+        error instanceof HttpException ||
+        error instanceof ServiceUnavailableException
+      ) {
         throw error;
       }
 
@@ -273,12 +332,23 @@ export class InOdcClientService {
           );
         }
 
+        if (response.status === 429) {
+          throw new HttpException(
+            'Le service in-odc limite temporairement les requetes',
+            HttpStatus.TOO_MANY_REQUESTS,
+          );
+        }
+
         throw new ServiceUnavailableException(
           'Le service in-odc est indisponible pour le moment',
         );
       }
     } catch (error) {
-      if (error instanceof UnauthorizedException) {
+      if (
+        error instanceof UnauthorizedException ||
+        error instanceof HttpException ||
+        error instanceof ServiceUnavailableException
+      ) {
         throw error;
       }
 
@@ -339,5 +409,23 @@ export class InOdcClientService {
     }
 
     return Math.max(timeoutMs, minimumTimeoutMs);
+  }
+
+  private buildCacheKey(
+    path: string,
+    query: Record<string, string | number | undefined>,
+    extraHeaders: Record<string, string>,
+  ): string {
+    return JSON.stringify({
+      path,
+      query: Object.entries(query)
+        .filter(
+          ([, value]) => value !== undefined && value !== null && value !== '',
+        )
+        .sort(([left], [right]) => left.localeCompare(right)),
+      headers: Object.entries(extraHeaders).sort(([left], [right]) =>
+        left.localeCompare(right),
+      ),
+    });
   }
 }
