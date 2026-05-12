@@ -5,7 +5,10 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { DOCTYPE, Prisma, ROLE } from '@prisma/client';
+import * as bcrypt from 'bcrypt';
 import { Workbook } from 'exceljs';
+import { randomBytes } from 'node:crypto';
+import { EmailService } from 'src/email/email.service';
 import { InOdcClientService } from 'src/integrations/in-odc/in-odc-client.service';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { ApprenantsQueryDto } from './dto/apprenants-query.dto';
@@ -29,6 +32,7 @@ export class ApprenantsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly inOdcClientService: InOdcClientService,
+    private readonly emailService: EmailService,
     @Inject(DOCUMENTS_STORAGE)
     private readonly documentsStorage: DocumentsStorageService,
   ) {}
@@ -565,6 +569,77 @@ export class ApprenantsService {
     return { message: 'Compte apprenant desactive avec succes' };
   }
 
+  async resendHistoricalCredentials(id: string) {
+    const apprenant = await this.prisma.apprenant.findUnique({
+      where: { id },
+      include: {
+        user: {
+          select: {
+            id: true,
+            nom: true,
+            prenom: true,
+            email: true,
+          },
+        },
+        promotion: {
+          select: {
+            id: true,
+            nom: true,
+          },
+        },
+      },
+    });
+
+    if (!apprenant) {
+      throw new NotFoundException(APPRENANTS_ERRORS.NOT_FOUND.message);
+    }
+
+    const inOdcPromotions = await this.inOdcClientService.getPromotions();
+    const isHistoricalPromotion = !inOdcPromotions.some(
+      (promotion) =>
+        this.normalizeText(promotion.name) ===
+        this.normalizeText(apprenant.promotion.nom),
+    );
+
+    if (!isHistoricalPromotion) {
+      throw new BadRequestException(
+        'Le renvoi des identifiants est reserve aux apprenants historiques importes.',
+      );
+    }
+
+    const temporaryPassword = this.generateTemporaryPassword();
+    const hashedPassword = await bcrypt.hash(temporaryPassword, 10);
+
+    await this.emailService.sendHistoricalLearnerCredentials({
+      email: apprenant.user.email,
+      firstName: apprenant.user.prenom,
+      lastName: apprenant.user.nom,
+      temporaryPassword,
+    });
+
+    await this.prisma.$transaction([
+      this.prisma.user.update({
+        where: { id: apprenant.user.id },
+        data: {
+          motDePasse: hashedPassword,
+        },
+      }),
+      this.prisma.apprenant.update({
+        where: { id: apprenant.id },
+        data: {
+          motDePasseTemporaire: true,
+        },
+      }),
+    ]);
+
+    return {
+      apprenantId: apprenant.id,
+      email: apprenant.user.email,
+      promotion: apprenant.promotion.nom,
+      message: 'Identifiants renvoyes avec succes',
+    };
+  }
+
   async getMe(userId: string) {
     const apprenant = await this.prisma.apprenant.findUnique({
       where: { userId },
@@ -658,6 +733,20 @@ export class ApprenantsService {
         },
       },
     });
+  }
+
+  private generateTemporaryPassword() {
+    const alphabet =
+      'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789';
+    const bytes = randomBytes(10);
+
+    return Array.from(bytes)
+      .map((value) => alphabet[value % alphabet.length])
+      .join('');
+  }
+
+  private normalizeText(value: string) {
+    return value.trim().toLowerCase();
   }
 
   private async buildMasterLearnerSituationSummary(

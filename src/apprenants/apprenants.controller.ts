@@ -172,6 +172,17 @@ export class ApprenantsController {
     return ResponseHelper.success(data);
   }
 
+  @Post(':id/resend-historical-credentials')
+  @Roles(ROLE.ADMIN, ROLE.POLE_EMPLOI, ROLE.MANAGER)
+  @HttpCode(HttpStatus.OK)
+  async resendHistoricalCredentials(@Param('id') id: string) {
+    const data = await this.service.resendHistoricalCredentials(id);
+    return ResponseHelper.success(
+      data,
+      'Identifiants historiques renvoyes avec succes',
+    );
+  }
+
   @Get('me')
   @Roles(ROLE.APPRENANT)
   async me(@Req() req: Request & { user: { id: string } }) {
