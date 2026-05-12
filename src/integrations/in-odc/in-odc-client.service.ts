@@ -24,14 +24,22 @@ export class InOdcClientService {
   private readonly logger = new Logger(InOdcClientService.name);
   private readonly cache = new Map<
     string,
-    { expiresAt: number; data: unknown }
+    { expiresAt: number; staleUntil: number; data: unknown }
   >();
-  private readonly defaultCacheTtlMs = 60_000;
+  private readonly inflightRequests = new Map<string, Promise<unknown>>();
+  private readonly defaultCacheTtlMs = 120_000;
+  private readonly defaultStaleTtlMs = 900_000;
 
   constructor(private readonly configService: ConfigService) {}
 
   async getPromotions(): Promise<InOdcPromotion[]> {
-    return this.getCachedJson<InOdcPromotion[]>('/promotions');
+    return this.getCachedJson<InOdcPromotion[]>(
+      '/promotions',
+      {},
+      {},
+      300_000,
+      1_800_000,
+    );
   }
 
   async getActivePromotion(): Promise<InOdcPromotion> {
@@ -39,12 +47,19 @@ export class InOdcClientService {
       '/promotions/active/reference',
       {},
       {},
-      60_000,
+      300_000,
+      1_800_000,
     );
   }
 
   async getReferentials(): Promise<InOdcReferential[]> {
-    return this.getCachedJson<InOdcReferential[]>('/referentials/all');
+    return this.getCachedJson<InOdcReferential[]>(
+      '/referentials/all',
+      {},
+      {},
+      300_000,
+      1_800_000,
+    );
   }
 
   async getReferenceLearners(
@@ -54,7 +69,8 @@ export class InOdcClientService {
       '/learners/reference-list',
       query,
       {},
-      30_000,
+      120_000,
+      600_000,
     );
   }
 
@@ -136,21 +152,56 @@ export class InOdcClientService {
     query: Record<string, string | number | undefined> = {},
     extraHeaders: Record<string, string> = {},
     ttlMs = this.defaultCacheTtlMs,
+    staleTtlMs = this.defaultStaleTtlMs,
   ): Promise<T> {
     const cacheKey = this.buildCacheKey(path, query, extraHeaders);
     const cached = this.cache.get(cacheKey);
+    const now = Date.now();
 
-    if (cached && cached.expiresAt > Date.now()) {
+    if (cached && cached.expiresAt > now) {
       return cached.data as T;
     }
 
-    const data = await this.getJson<T>(path, query, extraHeaders);
-    this.cache.set(cacheKey, {
-      data,
-      expiresAt: Date.now() + ttlMs,
-    });
+    const inflight = this.inflightRequests.get(cacheKey);
+    if (inflight) {
+      return inflight as Promise<T>;
+    }
 
-    return data;
+    const request = this.getJson<T>(path, query, extraHeaders)
+      .then((data) => {
+        this.cache.set(cacheKey, {
+          data,
+          expiresAt: Date.now() + ttlMs,
+          staleUntil: Date.now() + staleTtlMs,
+        });
+
+        return data;
+      })
+      .catch((error) => {
+        if (cached && cached.staleUntil > Date.now()) {
+          const status =
+            error instanceof HttpException ? error.getStatus() : undefined;
+
+          if (
+            status === HttpStatus.TOO_MANY_REQUESTS ||
+            error instanceof ServiceUnavailableException
+          ) {
+            this.logger.warn(
+              `Retour cache stale pour in-odc ${path} apres incident temporaire`,
+            );
+            return cached.data as T;
+          }
+        }
+
+        throw error;
+      })
+      .finally(() => {
+        this.inflightRequests.delete(cacheKey);
+      });
+
+    this.inflightRequests.set(cacheKey, request);
+
+    return request;
   }
 
   private async getJson<T>(
