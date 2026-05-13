@@ -5,7 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { DOCTYPE, Prisma, STATUT } from '@prisma/client';
-import { InOdcClientService } from 'src/integrations/in-odc/in-odc-client.service';
+import { MasterDataSyncService } from 'src/master-data/master-data-sync.service';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { CreateCoachDto } from './dto/create-coach.dto';
 import { CoachesQueryDto } from './dto/coaches-query.dto';
@@ -22,7 +22,7 @@ import type { DocumentsStorageService } from 'src/common/storage/documents-stora
 export class CoachesService {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly inOdcClientService: InOdcClientService,
+    private readonly masterDataSyncService: MasterDataSyncService,
     @Inject(DOCUMENTS_STORAGE)
     private readonly documentsStorage: DocumentsStorageService,
   ) {}
@@ -172,7 +172,7 @@ export class CoachesService {
    * Récupérer la liste de tous les coaches
    */
   async findAll(query: CoachesQueryDto) {
-    const items = (await this.inOdcClientService.getCoaches()).map((coach) => ({
+    const items = (await this.masterDataSyncService.getCoaches()).map((coach) => ({
       id: coach.id,
       nom: coach.lastName,
       prenom: coach.firstName,

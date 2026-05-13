@@ -10,6 +10,7 @@ import { Workbook } from 'exceljs';
 import { randomBytes } from 'node:crypto';
 import { EmailService } from 'src/email/email.service';
 import { InOdcClientService } from 'src/integrations/in-odc/in-odc-client.service';
+import { MasterDataSyncService } from 'src/master-data/master-data-sync.service';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { ApprenantsQueryDto } from './dto/apprenants-query.dto';
 import { CreateApprenantDto } from './dto/create-apprenant.dto';
@@ -32,6 +33,7 @@ export class ApprenantsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly inOdcClientService: InOdcClientService,
+    private readonly masterDataSyncService: MasterDataSyncService,
     private readonly emailService: EmailService,
     @Inject(DOCUMENTS_STORAGE)
     private readonly documentsStorage: DocumentsStorageService,
@@ -171,21 +173,51 @@ export class ApprenantsService {
     }
 
     const { page, limit } = normalizePagination(query);
-    const masterQuery = {
-      search: query.search,
-      promotionId: query.promotionId,
-      refId: query.referentielId,
-    };
-    const [response, allLearners] = await Promise.all([
-      this.inOdcClientService.getReferenceLearners({
-        page,
-        limit,
-        ...masterQuery,
-      }),
-      this.inOdcClientService.getAllReferenceLearners(masterQuery),
-    ]);
+    const allMasterLearners =
+      await this.masterDataSyncService.getReferenceLearners();
+    const filteredLearners = allMasterLearners.filter((item) => {
+      if (
+        query.promotionId &&
+        item.promotion.id !== query.promotionId
+      ) {
+        return false;
+      }
+
+      if (query.referentielId && item.referential?.id !== query.referentielId) {
+        return false;
+      }
+
+      if (query.search) {
+        const search = query.search.trim().toLowerCase();
+        const haystack = [
+          item.firstName,
+          item.lastName,
+          item.user.email,
+          item.phone,
+          item.matricule,
+          item.promotion.name,
+          item.referential?.name ?? '',
+        ]
+          .join(' ')
+          .toLowerCase();
+
+        if (!haystack.includes(search)) {
+          return false;
+        }
+      }
+
+      return true;
+    });
     const situationsByIdentity =
-      await this.buildMasterLearnerSituationSummary(allLearners);
+      await this.buildMasterLearnerSituationSummary(filteredLearners);
+    const pagedLearners = filteredLearners.slice(
+      (page - 1) * limit,
+      (page - 1) * limit + limit,
+    );
+    const response = {
+      items: pagedLearners,
+      pagination: buildPaginationMeta(page, limit, filteredLearners.length),
+    };
 
     return {
       items: response.items.map((item) => ({
@@ -607,7 +639,7 @@ export class ApprenantsService {
       throw new NotFoundException(APPRENANTS_ERRORS.NOT_FOUND.message);
     }
 
-    const inOdcPromotions = await this.inOdcClientService.getPromotions();
+    const inOdcPromotions = await this.masterDataSyncService.getPromotions();
     const isHistoricalPromotion = !inOdcPromotions.some(
       (promotion) =>
         this.normalizeText(promotion.name) ===
@@ -944,7 +976,7 @@ export class ApprenantsService {
 
     if (query.referentielId) {
       const masterReferentials =
-        await this.inOdcClientService.getReferentials();
+        await this.masterDataSyncService.getReferentials();
       const selectedMasterReferential = masterReferentials.find(
         (item) => item.id === query.referentielId,
       );
@@ -1012,7 +1044,7 @@ export class ApprenantsService {
         where: { id: promotionId },
         select: { id: true },
       }),
-      this.inOdcClientService.getPromotions(),
+      this.masterDataSyncService.getPromotions(),
     ]);
 
     if (!localPromotion) {

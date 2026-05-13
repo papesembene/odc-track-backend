@@ -1,6 +1,6 @@
 import { StatistiquesService } from './statistiques.service';
 import { CacheVersionService } from 'src/common/services/cache-version.service';
-import { InOdcClientService } from 'src/integrations/in-odc/in-odc-client.service';
+import { MasterDataSyncService } from 'src/master-data/master-data-sync.service';
 import { PrismaService } from 'src/prisma/prisma.service';
 
 describe('StatistiquesService', () => {
@@ -10,7 +10,7 @@ describe('StatistiquesService', () => {
     service = new StatistiquesService(
       {} as PrismaService,
       {} as CacheVersionService,
-      {} as InOdcClientService,
+      {} as MasterDataSyncService,
     );
   });
 

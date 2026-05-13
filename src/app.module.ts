@@ -19,6 +19,7 @@ import { StatistiquesModule } from './statistiques/statistiques.module';
 import { CoachesModule } from './coaches/coaches.module';
 import { CommonModule } from './common/common.module';
 import { InOdcModule } from './integrations/in-odc/in-odc.module';
+import { MasterDataModule } from './master-data/master-data.module';
 
 @Module({
   imports: [
@@ -27,6 +28,7 @@ import { InOdcModule } from './integrations/in-odc/in-odc.module';
     }),
     CommonModule,
     InOdcModule,
+    MasterDataModule,
     PrismaModule,
 
     AuthModule,

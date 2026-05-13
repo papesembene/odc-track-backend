@@ -4,8 +4,8 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
-import { InOdcClientService } from 'src/integrations/in-odc/in-odc-client.service';
 import { InOdcReferential } from 'src/integrations/in-odc/in-odc.types';
+import { MasterDataSyncService } from 'src/master-data/master-data-sync.service';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { CreateReferentielDto } from './dto/create-referentiel.dto';
 import { UpdateReferentielDto } from './dto/update-referentiel.dto';
@@ -20,7 +20,7 @@ import {
 export class ReferentielsService {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly inOdcClientService: InOdcClientService,
+    private readonly masterDataSyncService: MasterDataSyncService,
   ) {}
 
   private readonly referentielSelect = {
@@ -73,7 +73,7 @@ export class ReferentielsService {
   async findAllFromInOdc(query: ReferentielsQueryDto) {
     const { page, limit } = normalizePagination(query);
     const normalizedReferentiels = (
-      await this.inOdcClientService.getReferentials()
+      await this.masterDataSyncService.getReferentials()
     ).map((referential) => this.normalizeInOdcReferential(referential));
 
     const filteredItems = normalizedReferentiels

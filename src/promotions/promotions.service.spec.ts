@@ -1,6 +1,6 @@
 import { PromotionsService } from './promotions.service';
 import { CacheVersionService } from 'src/common/services/cache-version.service';
-import { InOdcClientService } from 'src/integrations/in-odc/in-odc-client.service';
+import { MasterDataSyncService } from 'src/master-data/master-data-sync.service';
 import { PrismaService } from 'src/prisma/prisma.service';
 
 describe('PromotionsService', () => {
@@ -10,7 +10,7 @@ describe('PromotionsService', () => {
     service = new PromotionsService(
       {} as PrismaService,
       {} as CacheVersionService,
-      {} as InOdcClientService,
+      {} as MasterDataSyncService,
     );
   });
 

@@ -5,8 +5,8 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
-import { InOdcClientService } from 'src/integrations/in-odc/in-odc-client.service';
 import { InOdcPromotion } from 'src/integrations/in-odc/in-odc.types';
+import { MasterDataSyncService } from 'src/master-data/master-data-sync.service';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { CreatePromotionDto } from './dto/create-promotion.dto';
 import { PromotionsQueryDto } from './dto/promotions-query.dto';
@@ -75,7 +75,7 @@ export class PromotionsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly cacheVersionService: CacheVersionService,
-    private readonly inOdcClientService: InOdcClientService,
+    private readonly masterDataSyncService: MasterDataSyncService,
   ) {}
 
   create(dto: CreatePromotionDto): never {
@@ -144,9 +144,9 @@ export class PromotionsService {
     const { page, limit } = normalizePagination(query);
     const includeMetrics = query.includeMetrics !== false;
     const [rawPromotions, masterLearners] = await Promise.all([
-      this.inOdcClientService.getPromotions(),
+      this.masterDataSyncService.getPromotions(),
       includeMetrics
-        ? this.inOdcClientService.getAllReferenceLearners()
+        ? this.masterDataSyncService.getReferenceLearners()
         : Promise.resolve([]),
     ]);
     const normalizedPromotions: MasterPromotionData[] = rawPromotions.map(
@@ -246,7 +246,7 @@ export class PromotionsService {
   }
 
   async getActiveFromInOdc() {
-    const promotion = await this.inOdcClientService.getActivePromotion();
+    const promotion = await this.masterDataSyncService.getActivePromotion();
     return this.normalizeInOdcPromotion(promotion);
   }
 

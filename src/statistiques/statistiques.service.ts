@@ -5,12 +5,12 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { Prisma } from '@prisma/client';
-import { InOdcClientService } from 'src/integrations/in-odc/in-odc-client.service';
 import {
   InOdcReferenceLearner,
   InOdcPromotion,
   InOdcReferential,
 } from 'src/integrations/in-odc/in-odc.types';
+import { MasterDataSyncService } from 'src/master-data/master-data-sync.service';
 import {
   PROMOTIONS_ERRORS,
   REFERENTIELS_ERRORS,
@@ -33,7 +33,7 @@ export class StatistiquesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly cacheVersionService: CacheVersionService,
-    private readonly inOdcClientService: InOdcClientService,
+    private readonly masterDataSyncService: MasterDataSyncService,
   ) {}
 
   // ============================================
@@ -196,17 +196,20 @@ export class StatistiquesService {
     includeReferentiels: boolean;
     includeSituationsRecentes: boolean;
   }) {
-    const [learners, promotions, referentials] = await Promise.all([
-      this.inOdcClientService.getAllReferenceLearners({
-        promotionId: options.promotionId,
-      }),
+    const [allLearners, promotions, referentials] = await Promise.all([
+      this.masterDataSyncService.getReferenceLearners(),
       options.includePromotions
-        ? this.inOdcClientService.getPromotions()
+        ? this.masterDataSyncService.getPromotions()
         : Promise.resolve([] as InOdcPromotion[]),
       options.includeReferentiels
-        ? this.inOdcClientService.getReferentials()
+        ? this.masterDataSyncService.getReferentials()
         : Promise.resolve([] as InOdcReferential[]),
     ]);
+    const learners = options.promotionId
+      ? allLearners.filter(
+          (learner) => learner.promotion.id === options.promotionId,
+        )
+      : allLearners;
     const historicalStats = await this.getHistoricalGlobalStats({
       promotionId: options.promotionId,
       masterPromotions: promotions,
@@ -1013,7 +1016,7 @@ export class StatistiquesService {
         where: { id: promotionId },
         select: { id: true },
       }),
-      this.inOdcClientService.getPromotions(),
+      this.masterDataSyncService.getPromotions(),
     ]);
 
     if (!localPromotion) {

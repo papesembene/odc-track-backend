@@ -145,6 +145,13 @@ model Document {
   @@index([situationId, createdAt])
 }
 
+model MasterDataSnapshot {
+  key      String   @id
+  payload  Json
+  syncedAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
 enum ROLE {
   ADMIN
   COACH

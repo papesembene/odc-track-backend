@@ -1,6 +1,7 @@
 import { ApprenantsService } from './apprenants.service';
 import { EmailService } from 'src/email/email.service';
 import { InOdcClientService } from 'src/integrations/in-odc/in-odc-client.service';
+import { MasterDataSyncService } from 'src/master-data/master-data-sync.service';
 import { PrismaService } from 'src/prisma/prisma.service';
 import type { DocumentsStorageService } from 'src/common/storage/documents-storage.interface';
 
@@ -11,6 +12,7 @@ describe('ApprenantsService', () => {
     service = new ApprenantsService(
       {} as PrismaService,
       {} as InOdcClientService,
+      {} as MasterDataSyncService,
       {} as EmailService,
       {} as DocumentsStorageService,
     );
