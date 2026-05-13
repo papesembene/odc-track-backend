@@ -6,9 +6,17 @@ import {
 import { ConfigService } from '@nestjs/config';
 import * as nodemailer from 'nodemailer';
 
+type HistoricalEmailPayload = {
+  email: string;
+  firstName: string;
+  lastName: string;
+  temporaryPassword: string;
+};
+
 @Injectable()
 export class EmailService {
   private readonly logger = new Logger(EmailService.name);
+  private static readonly BREVO_API_URL = 'https://api.brevo.com/v3/smtp/email';
 
   constructor(private readonly configService: ConfigService) {}
 
@@ -29,14 +37,9 @@ export class EmailService {
     });
   }
 
-  async sendHistoricalLearnerCredentials(params: {
-    email: string;
-    firstName: string;
-    lastName: string;
-    temporaryPassword: string;
-  }): Promise<void> {
-    this.ensureSmtpConfiguration();
-
+  async sendHistoricalLearnerCredentials(
+    params: HistoricalEmailPayload,
+  ): Promise<void> {
     const frontendUrl =
       this.configService.get<string>('FRONTEND_URL')?.trim() ??
       'https://gestionecoleodc.com';
@@ -44,37 +47,41 @@ export class EmailService {
       this.configService.get<string>('SMTP_FROM')?.trim() ||
       this.configService.get<string>('SMTP_USER')?.trim() ||
       'no-reply@odc.local';
+    const fromName =
+      this.configService.get<string>('MAIL_FROM_NAME')?.trim() ||
+      'Suivi insertion ODC';
 
-    const mailOptions: nodemailer.SendMailOptions = {
-      from: {
-        name: 'Suivi insertion ODC',
-        address: fromAddress,
-      },
-      to: params.email,
-      subject: 'Vos identifiants Suivi insertion',
-      html: this.buildHistoricalCredentialsTemplate({
-        ...params,
-        frontendUrl,
-      }),
-      text: [
-        `Bonjour ${params.firstName} ${params.lastName},`,
-        '',
-        'Votre compte Suivi insertion a ete cree.',
-        `Email : ${params.email}`,
-        `Mot de passe temporaire : ${params.temporaryPassword}`,
-        `Connexion : ${frontendUrl}`,
-        '',
-        'Vous devrez changer ce mot de passe lors de votre premiere connexion.',
-      ].join('\n'),
-    };
+    const subject = 'Vos identifiants Suivi insertion';
+    const html = this.buildHistoricalCredentialsTemplate({
+      ...params,
+      frontendUrl,
+    });
+    const text = [
+      `Bonjour ${params.firstName} ${params.lastName},`,
+      '',
+      'Votre compte Suivi insertion a ete cree.',
+      `Email : ${params.email}`,
+      `Mot de passe temporaire : ${params.temporaryPassword}`,
+      `Connexion : ${frontendUrl}`,
+      '',
+      'Vous devrez changer ce mot de passe lors de votre premiere connexion.',
+    ].join('\n');
 
     const maxAttempts = 3;
     let lastError: unknown = null;
 
     for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
       try {
-        const transporter = this.createTransporter();
-        await transporter.sendMail(mailOptions);
+        await this.sendEmail({
+          email: params.email,
+          firstName: params.firstName,
+          lastName: params.lastName,
+          fromAddress,
+          fromName,
+          subject,
+          html,
+          text,
+        });
         this.logger.log(`Identifiants historiques envoyes a ${params.email}`);
         return;
       } catch (error) {
@@ -98,6 +105,92 @@ export class EmailService {
     throw new ServiceUnavailableException(
       `Impossible d'envoyer l'email pour le moment: ${finalMessage}`,
     );
+  }
+
+  private async sendEmail(params: {
+    email: string;
+    firstName: string;
+    lastName: string;
+    fromAddress: string;
+    fromName: string;
+    subject: string;
+    html: string;
+    text: string;
+  }): Promise<void> {
+    const brevoApiKey = this.configService.get<string>('BREVO_API_KEY')?.trim();
+
+    if (brevoApiKey) {
+      await this.sendWithBrevoApi({
+        apiKey: brevoApiKey,
+        ...params,
+      });
+      return;
+    }
+
+    this.ensureSmtpConfiguration();
+
+    const transporter = this.createTransporter();
+    await transporter.sendMail({
+      from: {
+        name: params.fromName,
+        address: params.fromAddress,
+      },
+      to: params.email,
+      subject: params.subject,
+      html: params.html,
+      text: params.text,
+    });
+  }
+
+  private async sendWithBrevoApi(params: {
+    apiKey: string;
+    email: string;
+    firstName: string;
+    lastName: string;
+    fromAddress: string;
+    fromName: string;
+    subject: string;
+    html: string;
+    text: string;
+  }): Promise<void> {
+    const abortController = new AbortController();
+    const timeout = setTimeout(() => abortController.abort(), 20_000);
+
+    try {
+      const response = await fetch(EmailService.BREVO_API_URL, {
+        method: 'POST',
+        headers: {
+          accept: 'application/json',
+          'api-key': params.apiKey,
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          sender: {
+            name: params.fromName,
+            email: params.fromAddress,
+          },
+          to: [
+            {
+              email: params.email,
+              name: `${params.firstName} ${params.lastName}`.trim(),
+            },
+          ],
+          subject: params.subject,
+          htmlContent: params.html,
+          textContent: params.text,
+        }),
+        signal: abortController.signal,
+      });
+
+      if (!response.ok) {
+        const responseText = await response.text();
+        throw new Error(
+          `Brevo API ${response.status}: ${responseText || response.statusText}`,
+        );
+      }
+    } finally {
+      clearTimeout(timeout);
+    }
   }
 
   private ensureSmtpConfiguration(): void {
