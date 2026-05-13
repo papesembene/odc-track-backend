@@ -436,59 +436,72 @@ export class ApprenantsService {
   }
 
   async findOneFromInOdc(id: string) {
-    const learner = await this.inOdcClientService.getLearnerById(id);
-    const localApprenant = await this.findLocalApprenantForMasterData(
-      learner.user.email,
-      learner.phone,
-    );
+    try {
+      const learner = await this.inOdcClientService.getLearnerById(id);
+      const localApprenant = await this.findLocalApprenantForMasterData(
+        learner.user.email,
+        learner.phone,
+      );
 
-    const cvDocument = localApprenant
-      ? await this.prisma.document.findFirst({
-          where: {
-            apprenantId: localApprenant.id,
-            type: DOCTYPE.CV,
-            situationId: null,
-          },
-          select: {
-            id: true,
-            type: true,
-            fichier: true,
-            dateUpload: true,
-            createdAt: true,
-            updatedAt: true,
-          },
-          orderBy: { updatedAt: 'desc' },
-        })
-      : null;
+      const cvDocument = localApprenant
+        ? await this.prisma.document.findFirst({
+            where: {
+              apprenantId: localApprenant.id,
+              type: DOCTYPE.CV,
+              situationId: null,
+            },
+            select: {
+              id: true,
+              type: true,
+              fichier: true,
+              dateUpload: true,
+              createdAt: true,
+              updatedAt: true,
+            },
+            orderBy: { updatedAt: 'desc' },
+          })
+        : null;
 
-    return {
-      id: learner.id,
-      localId: localApprenant?.id ?? null,
-      telephone: learner.phone,
-      user: {
-        id: learner.user.id,
-        nom: learner.lastName,
-        prenom: learner.firstName,
-        email: learner.user.email,
-      },
-      promotion: {
-        id: learner.promotion.id,
-        nom: learner.promotion.name,
-      },
-      referentiel: learner.referential
-        ? {
-            id: learner.referential.id,
-            nom: learner.referential.name,
-          }
-        : {
-            id: '',
-            nom: 'Non assigne',
-          },
-      situations: localApprenant?.situations ?? [],
-      cvDocument: cvDocument
-        ? await this.resolveDocumentSummary(cvDocument)
-        : null,
-    };
+      return {
+        id: learner.id,
+        localId: localApprenant?.id ?? null,
+        telephone: learner.phone,
+        user: {
+          id: learner.user.id,
+          nom: learner.lastName,
+          prenom: learner.firstName,
+          email: learner.user.email,
+        },
+        promotion: {
+          id: learner.promotion.id,
+          nom: learner.promotion.name,
+        },
+        referentiel: learner.referential
+          ? {
+              id: learner.referential.id,
+              nom: learner.referential.name,
+            }
+          : {
+              id: '',
+              nom: 'Non assigne',
+            },
+        situations: localApprenant?.situations ?? [],
+        cvDocument: cvDocument
+          ? await this.resolveDocumentSummary(cvDocument)
+          : null,
+      };
+    } catch (error) {
+      if (!(error instanceof NotFoundException)) {
+        throw error;
+      }
+
+      const localApprenant = await this.findOne(id);
+
+      return {
+        ...localApprenant,
+        localId: localApprenant.id,
+      };
+    }
   }
 
   async update(id: string, dto: UpdateApprenantDto) {
