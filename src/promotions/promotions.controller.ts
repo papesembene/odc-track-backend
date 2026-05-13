@@ -43,7 +43,12 @@ export class PromotionsController {
   }
 
   @Get('master-data')
-  async findAllMasterData(@Query() query: PromotionsQueryDto) {
+  async findAllMasterData(@Query() query: PromotionsQueryDto): Promise<{
+    success: boolean;
+    message: string;
+    data: Awaited<ReturnType<PromotionsService['findAllFromInOdc']>>;
+    timeStamp: string;
+  }> {
     const data = await this.service.findAllFromInOdc(query);
     return ResponseHelper.success(data);
   }

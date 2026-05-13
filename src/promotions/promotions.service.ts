@@ -43,12 +43,17 @@ type MasterPromotionData = {
   tauxInsertion?: number;
 };
 
+type MasterPromotionsResult = {
+  items: MasterPromotionData[];
+  pagination: ReturnType<typeof buildPaginationMeta>;
+};
+
 @Injectable()
 export class PromotionsService {
   private readonly logger = new Logger(PromotionsService.name);
   private readonly masterPromotionsCache = new Map<
     string,
-    { expiresAt: number; data: Awaited<ReturnType<PromotionsService['findAllFromInOdc']>> }
+    { expiresAt: number; data: MasterPromotionsResult }
   >();
   private readonly masterPromotionsCacheTtlMs = 120_000;
   private readonly promotionWithReferentielsSelect = {
@@ -232,7 +237,7 @@ export class PromotionsService {
       };
     });
 
-    const result = {
+    const result: MasterPromotionsResult = {
       items,
       pagination: buildPaginationMeta(page, limit, totalItems),
     };
