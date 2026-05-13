@@ -1,17 +1,27 @@
-import { Injectable, Logger } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as nodemailer from 'nodemailer';
 
 @Injectable()
 export class EmailService {
   private readonly logger = new Logger(EmailService.name);
-  private readonly transporter: nodemailer.Transporter;
 
-  constructor(private readonly configService: ConfigService) {
-    this.transporter = nodemailer.createTransport({
+  constructor(private readonly configService: ConfigService) {}
+
+  private createTransporter() {
+    const port = Number(this.configService.get<string>('SMTP_PORT', '587'));
+
+    return nodemailer.createTransport({
       host: this.configService.get<string>('SMTP_HOST', 'smtp.gmail.com'),
-      port: Number(this.configService.get<string>('SMTP_PORT', '587')),
-      secure: false,
+      port,
+      secure: port === 465,
+      connectionTimeout: 20_000,
+      greetingTimeout: 20_000,
+      socketTimeout: 30_000,
       auth: {
         user: this.configService.get<string>('SMTP_USER'),
         pass: this.configService.get<string>('SMTP_PASS'),
@@ -35,7 +45,7 @@ export class EmailService {
       this.configService.get<string>('SMTP_USER')?.trim() ||
       'no-reply@odc.local';
 
-    await this.transporter.sendMail({
+    const mailOptions: nodemailer.SendMailOptions = {
       from: {
         name: 'Suivi insertion ODC',
         address: fromAddress,
@@ -56,9 +66,38 @@ export class EmailService {
         '',
         'Vous devrez changer ce mot de passe lors de votre premiere connexion.',
       ].join('\n'),
-    });
+    };
 
-    this.logger.log(`Identifiants historiques envoyes a ${params.email}`);
+    const maxAttempts = 3;
+    let lastError: unknown = null;
+
+    for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+      try {
+        const transporter = this.createTransporter();
+        await transporter.sendMail(mailOptions);
+        this.logger.log(`Identifiants historiques envoyes a ${params.email}`);
+        return;
+      } catch (error) {
+        lastError = error;
+        const message =
+          error instanceof Error ? error.message : 'Erreur SMTP inconnue';
+
+        this.logger.warn(
+          `Echec envoi email historique a ${params.email} (tentative ${attempt}/${maxAttempts}): ${message}`,
+        );
+
+        if (attempt < maxAttempts) {
+          await this.delay(attempt * 2_000);
+        }
+      }
+    }
+
+    const finalMessage =
+      lastError instanceof Error ? lastError.message : 'Erreur SMTP inconnue';
+
+    throw new ServiceUnavailableException(
+      `Impossible d'envoyer l'email pour le moment: ${finalMessage}`,
+    );
   }
 
   private ensureSmtpConfiguration(): void {
@@ -71,6 +110,10 @@ export class EmailService {
       );
       throw new Error('Service email non configure');
     }
+  }
+
+  private async delay(ms: number) {
+    await new Promise((resolve) => setTimeout(resolve, ms));
   }
 
   private buildHistoricalCredentialsTemplate(params: {
