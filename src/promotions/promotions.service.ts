@@ -46,6 +46,11 @@ type MasterPromotionData = {
 @Injectable()
 export class PromotionsService {
   private readonly logger = new Logger(PromotionsService.name);
+  private readonly masterPromotionsCache = new Map<
+    string,
+    { expiresAt: number; data: Awaited<ReturnType<PromotionsService['findAllFromInOdc']>> }
+  >();
+  private readonly masterPromotionsCacheTtlMs = 120_000;
   private readonly promotionWithReferentielsSelect = {
     id: true,
     nom: true,
@@ -120,10 +125,29 @@ export class PromotionsService {
   }
 
   async findAllFromInOdc(query: PromotionsQueryDto) {
+    const cacheKey = JSON.stringify({
+      search: query.search ?? null,
+      annee: query.annee ?? null,
+      referentielId: query.referentielId ?? null,
+      sortBy: query.sortBy ?? 'createdAt',
+      sortOrder: query.sortOrder ?? 'desc',
+      page: query.page ?? 1,
+      limit: query.limit ?? 10,
+      includeMetrics: query.includeMetrics !== false,
+    });
+    const cached = this.masterPromotionsCache.get(cacheKey);
+
+    if (cached && cached.expiresAt > Date.now()) {
+      return cached.data;
+    }
+
     const { page, limit } = normalizePagination(query);
+    const includeMetrics = query.includeMetrics !== false;
     const [rawPromotions, masterLearners] = await Promise.all([
       this.inOdcClientService.getPromotions(),
-      this.inOdcClientService.getAllReferenceLearners(),
+      includeMetrics
+        ? this.inOdcClientService.getAllReferenceLearners()
+        : Promise.resolve([]),
     ]);
     const normalizedPromotions: MasterPromotionData[] = rawPromotions.map(
       (promotion) => this.normalizeInOdcPromotion(promotion),
@@ -165,23 +189,32 @@ export class PromotionsService {
       .sort((left, right) => this.compareMasterPromotions(left, right, query));
 
     const filteredPromotionIds = new Set(filteredItems.map((item) => item.id));
-    const relevantLearners = masterLearners.filter((learner) =>
-      filteredPromotionIds.has(learner.promotion.id),
-    );
-    const emploiByPromotion =
-      await this.buildMasterPromotionEmploymentMap(relevantLearners);
+    const relevantLearners = includeMetrics
+      ? masterLearners.filter((learner) =>
+          filteredPromotionIds.has(learner.promotion.id),
+        )
+      : [];
+    const emploiByPromotion = includeMetrics
+      ? await this.buildMasterPromotionEmploymentMap(relevantLearners)
+      : new Map<string, number>();
     const learnersCountByPromotion = new Map<string, number>();
 
-    for (const learner of relevantLearners) {
-      learnersCountByPromotion.set(
-        learner.promotion.id,
-        (learnersCountByPromotion.get(learner.promotion.id) ?? 0) + 1,
-      );
+    if (includeMetrics) {
+      for (const learner of relevantLearners) {
+        learnersCountByPromotion.set(
+          learner.promotion.id,
+          (learnersCountByPromotion.get(learner.promotion.id) ?? 0) + 1,
+        );
+      }
     }
 
     const totalItems = filteredItems.length;
     const start = (page - 1) * limit;
     const items = filteredItems.slice(start, start + limit).map((promotion) => {
+      if (!includeMetrics) {
+        return promotion;
+      }
+
       const totalApprenants = learnersCountByPromotion.get(promotion.id) ?? 0;
       const enEmploi =
         promotion.totalApprenants !== undefined &&
@@ -199,10 +232,17 @@ export class PromotionsService {
       };
     });
 
-    return {
+    const result = {
       items,
       pagination: buildPaginationMeta(page, limit, totalItems),
     };
+
+    this.masterPromotionsCache.set(cacheKey, {
+      data: result,
+      expiresAt: Date.now() + this.masterPromotionsCacheTtlMs,
+    });
+
+    return result;
   }
 
   async getActiveFromInOdc() {
