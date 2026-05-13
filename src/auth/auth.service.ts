@@ -49,14 +49,21 @@ export class AuthService {
   ) {}
 
   async login(loginDto: LoginDto) {
-    const existingUser = await this.findUserByEmail(loginDto.email);
+    const normalizedLogin = {
+      ...loginDto,
+      email: this.normalizeEmail(loginDto.email),
+    };
+    const existingUser = await this.findUserByEmail(normalizedLogin.email);
 
     if (existingUser && existingUser.role !== ROLE.APPRENANT) {
       if (!existingUser.actif) {
         throw new UnauthorizedException(AUTH_ERROR.UNAUTHORIZED.message);
       }
 
-      await this.validatePassword(loginDto.password, existingUser.motDePasse);
+      await this.validatePassword(
+        normalizedLogin.password,
+        existingUser.motDePasse,
+      );
       const tokens = await this.generateTokens(
         existingUser.id,
         existingUser.email,
@@ -74,7 +81,7 @@ export class AuthService {
       };
     }
 
-    return this.loginApprenantViaInOdc(loginDto);
+    return this.loginApprenantViaInOdc(normalizedLogin);
   }
 
   // ─── LOGOUT ───────────────────────────────────────────────────────────────
@@ -100,6 +107,10 @@ export class AuthService {
       where: { email },
       select: authUserSelect,
     });
+  }
+
+  private normalizeEmail(email: string): string {
+    return email.trim().toLowerCase();
   }
 
   private async findActiveUserById(id: string): Promise<AuthUser> {
