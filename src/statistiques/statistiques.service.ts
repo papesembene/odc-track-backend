@@ -208,6 +208,7 @@ export class StatistiquesService {
         : Promise.resolve([] as InOdcReferential[]),
     ]);
     const historicalStats = await this.getHistoricalGlobalStats({
+      promotionId: options.promotionId,
       masterPromotions: promotions,
       includePromotions: options.includePromotions,
       includeReferentiels: options.includeReferentiels,
@@ -341,11 +342,47 @@ export class StatistiquesService {
   }
 
   private async getHistoricalGlobalStats(options: {
+    promotionId?: string;
     masterPromotions: InOdcPromotion[];
     includePromotions: boolean;
     includeReferentiels: boolean;
     includeSituationsRecentes: boolean;
   }) {
+    if (options.promotionId) {
+      return {
+        totalApprenants: 0,
+        totalSituations: 0,
+        validees: 0,
+        enEmploi: 0,
+        parStatut: {
+          EN_EMPLOI: 0,
+          EN_STAGE: 0,
+          RECHERCHE_EMPLOI: 0,
+          PROJET_PERSO: 0,
+          POURSUITE_ETUDES: 0,
+        },
+        parPromotion: [] as Array<{
+          promotionId: string;
+          promotionNom: string;
+          total: number;
+          enEmploi: number;
+        }>,
+        parReferentiel: [] as Array<{
+          referentielId: string;
+          referentielNom: string;
+          total: number;
+          enEmploi: number;
+        }>,
+        situationsRecentes: [] as Array<{
+          id: string;
+          statut: string;
+          createdAt: Date;
+          valide: boolean;
+          apprenant: { user: { nom: string; prenom: string } };
+        }>,
+      };
+    }
+
     const masterPromotionNames = new Set(
       options.masterPromotions.map((promotion) =>
         this.normalizeText(promotion.name),
