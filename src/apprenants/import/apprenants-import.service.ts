@@ -847,7 +847,9 @@ export class ApprenantsImportService {
       };
     }
 
-    const masterReferentials = await this.inOdcClientService.getReferentials();
+    const masterReferentials = await this.inOdcClientService.getReferentials({
+      forceRefresh: true,
+    });
     const masterReferential = masterReferentials.find(
       (referential) =>
         this.normalizeText(referential.name) === this.normalizeText(name),
@@ -948,7 +950,9 @@ export class ApprenantsImportService {
   }
 
   private async ensurePromotionIsHistorical(name: string) {
-    const masterPromotions = await this.inOdcClientService.getPromotions();
+    const masterPromotions = await this.inOdcClientService.getPromotions({
+      forceRefresh: true,
+    });
     const existsInMasterData = masterPromotions.some(
       (promotion) =>
         this.normalizeText(promotion.name) === this.normalizeText(name),
@@ -962,7 +966,9 @@ export class ApprenantsImportService {
   }
 
   private async ensureReferentialExistsInMasterData(name: string) {
-    const masterReferentials = await this.inOdcClientService.getReferentials();
+    const masterReferentials = await this.inOdcClientService.getReferentials({
+      forceRefresh: true,
+    });
     const existsInMasterData = masterReferentials.some(
       (referential) =>
         this.normalizeText(referential.name) === this.normalizeText(name),

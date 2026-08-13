@@ -73,7 +73,9 @@ export class ReferentielsService {
   async findAllFromInOdc(query: ReferentielsQueryDto) {
     const { page, limit } = normalizePagination(query);
     const normalizedReferentiels = (
-      await this.masterDataSyncService.getReferentials()
+      await this.masterDataSyncService.getReferentials({
+        forceRefresh: true,
+      })
     ).map((referential) => this.normalizeInOdcReferential(referential));
 
     const filteredItems = normalizedReferentiels

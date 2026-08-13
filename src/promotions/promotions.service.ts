@@ -130,6 +130,7 @@ export class PromotionsService {
   }
 
   async findAllFromInOdc(query: PromotionsQueryDto) {
+    const forceRefresh = query.forceRefresh ?? true;
     const cacheKey = JSON.stringify({
       search: query.search ?? null,
       annee: query.annee ?? null,
@@ -140,7 +141,7 @@ export class PromotionsService {
       limit: query.limit ?? 10,
       includeMetrics: query.includeMetrics !== false,
     });
-    const cached = this.masterPromotionsCache.get(cacheKey);
+    const cached = forceRefresh ? null : this.masterPromotionsCache.get(cacheKey);
 
     if (cached && cached.expiresAt > Date.now()) {
       return cached.data;
@@ -149,9 +150,13 @@ export class PromotionsService {
     const { page, limit } = normalizePagination(query);
     const includeMetrics = query.includeMetrics !== false;
     const [rawPromotions, masterLearners] = await Promise.all([
-      this.masterDataSyncService.getPromotions(),
+      this.masterDataSyncService.getPromotions({
+        forceRefresh,
+      }),
       includeMetrics
-        ? this.masterDataSyncService.getReferenceLearners()
+        ? this.masterDataSyncService.getReferenceLearners({
+            forceRefresh,
+          })
         : Promise.resolve([]),
     ]);
     const normalizedPromotions: MasterPromotionData[] = rawPromotions.map(
@@ -250,8 +255,10 @@ export class PromotionsService {
     return result;
   }
 
-  async getActiveFromInOdc() {
-    const promotion = await this.masterDataSyncService.getActivePromotion();
+  async getActiveFromInOdc(options?: { forceRefresh?: boolean }) {
+    const promotion = await this.masterDataSyncService.getActivePromotion({
+      forceRefresh: options?.forceRefresh ?? true,
+    });
     return this.normalizeInOdcPromotion(promotion);
   }
 

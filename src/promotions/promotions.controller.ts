@@ -49,13 +49,16 @@ export class PromotionsController {
     data: Awaited<ReturnType<PromotionsService['findAllFromInOdc']>>;
     timeStamp: string;
   }> {
+    query.forceRefresh = true;
     const data = await this.service.findAllFromInOdc(query);
     return ResponseHelper.success(data);
   }
 
   @Get('master-data/active')
-  async getActiveMasterData() {
-    const data = await this.service.getActiveFromInOdc();
+  async getActiveMasterData(@Query() query: PromotionsQueryDto) {
+    const data = await this.service.getActiveFromInOdc({
+      forceRefresh: true,
+    });
     return ResponseHelper.success(data);
   }
 

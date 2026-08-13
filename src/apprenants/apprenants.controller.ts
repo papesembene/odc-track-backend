@@ -68,7 +68,10 @@ export class ApprenantsController {
   @Get('master-data')
   @Roles(ROLE.POLE_EMPLOI, ROLE.MANAGER)
   async findAllMasterData(@Query() query: ApprenantsQueryDto) {
-    const activePromotion = await this.promotionsService.getActiveFromInOdc();
+    query.forceRefresh = true;
+    const activePromotion = await this.promotionsService.getActiveFromInOdc({
+      forceRefresh: true,
+    });
     if (!query.promotionId && activePromotion) {
       query.promotionId = activePromotion.id;
     }

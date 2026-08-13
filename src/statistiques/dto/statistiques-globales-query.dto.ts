@@ -21,6 +21,11 @@ export class StatistiquesGlobalesQueryDto {
   @IsOptional()
   @Transform(({ value }) => toBoolean(value))
   @IsBoolean()
+  forceRefresh?: boolean;
+
+  @IsOptional()
+  @Transform(({ value }) => toBoolean(value))
+  @IsBoolean()
   includePromotions?: boolean;
 
   @IsOptional()

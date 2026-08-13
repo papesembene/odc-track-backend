@@ -173,8 +173,9 @@ export class ApprenantsService {
     }
 
     const { page, limit } = normalizePagination(query);
-    const allMasterLearners =
-      await this.masterDataSyncService.getReferenceLearners();
+    const allMasterLearners = await this.masterDataSyncService.getReferenceLearners(
+      { forceRefresh: query.forceRefresh ?? true },
+    );
     const filteredLearners = allMasterLearners.filter((item) => {
       if (
         query.promotionId &&
@@ -639,7 +640,9 @@ export class ApprenantsService {
       throw new NotFoundException(APPRENANTS_ERRORS.NOT_FOUND.message);
     }
 
-    const inOdcPromotions = await this.masterDataSyncService.getPromotions();
+    const inOdcPromotions = await this.masterDataSyncService.getPromotions({
+      forceRefresh: true,
+    });
     const isHistoricalPromotion = !inOdcPromotions.some(
       (promotion) =>
         this.normalizeText(promotion.name) ===
@@ -976,7 +979,9 @@ export class ApprenantsService {
 
     if (query.referentielId) {
       const masterReferentials =
-        await this.masterDataSyncService.getReferentials();
+        await this.masterDataSyncService.getReferentials({
+          forceRefresh: true,
+        });
       const selectedMasterReferential = masterReferentials.find(
         (item) => item.id === query.referentielId,
       );
@@ -1044,7 +1049,7 @@ export class ApprenantsService {
         where: { id: promotionId },
         select: { id: true },
       }),
-      this.masterDataSyncService.getPromotions(),
+      this.masterDataSyncService.getPromotions({ forceRefresh: true }),
     ]);
 
     if (!localPromotion) {

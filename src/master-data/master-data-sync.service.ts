@@ -41,7 +41,7 @@ export class MasterDataSyncService {
   async getPromotions(options?: { forceRefresh?: boolean }) {
     return this.getSnapshot<InOdcPromotion[]>(
       'promotions',
-      () => this.inOdcClientService.getPromotions(),
+      () => this.inOdcClientService.getPromotions(options),
       options,
     );
   }
@@ -61,7 +61,7 @@ export class MasterDataSyncService {
   async getReferentials(options?: { forceRefresh?: boolean }) {
     return this.getSnapshot<InOdcReferential[]>(
       'referentials',
-      () => this.inOdcClientService.getReferentials(),
+      () => this.inOdcClientService.getReferentials(options),
       options,
     );
   }
@@ -69,7 +69,7 @@ export class MasterDataSyncService {
   async getCoaches(options?: { forceRefresh?: boolean }) {
     return this.getSnapshot<InOdcReferenceCoach[]>(
       'coaches',
-      () => this.inOdcClientService.getCoaches(),
+      () => this.inOdcClientService.getCoaches(options),
       options,
     );
   }
@@ -77,7 +77,7 @@ export class MasterDataSyncService {
   async getReferenceLearners(options?: { forceRefresh?: boolean }) {
     return this.getSnapshot<InOdcReferenceLearner[]>(
       'learners',
-      () => this.inOdcClientService.getAllReferenceLearners(),
+      () => this.inOdcClientService.getAllReferenceLearners({}, options),
       options,
     );
   }

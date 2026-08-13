@@ -162,13 +162,14 @@ export class StatistiquesService {
     promotionId?: string,
     options: StatistiquesGlobalesQueryDto = {},
   ) {
-    if (await this.isHistoricalPromotionSelection(promotionId)) {
+    const forceRefresh = options.forceRefresh ?? true;
+    if (await this.isHistoricalPromotionSelection(promotionId, options)) {
       return this.buildHistoricalGlobalStats(promotionId!, options);
     }
 
     // Le cache depend de la promotion active et des blocs demandes par le frontend.
     const cacheKey = this.buildGlobalStatsCacheKey(promotionId, options);
-    const cachedData = this.getCachedGlobalStats(cacheKey);
+    const cachedData = forceRefresh ? null : this.getCachedGlobalStats(cacheKey);
 
     if (cachedData) {
       return cachedData;
@@ -183,6 +184,7 @@ export class StatistiquesService {
       includePromotions,
       includeReferentiels,
       includeSituationsRecentes,
+      forceRefresh,
     });
 
     this.setCachedGlobalStats(cacheKey, result);
@@ -195,14 +197,21 @@ export class StatistiquesService {
     includePromotions: boolean;
     includeReferentiels: boolean;
     includeSituationsRecentes: boolean;
+    forceRefresh?: boolean;
   }) {
     const [allLearners, promotions, referentials] = await Promise.all([
-      this.masterDataSyncService.getReferenceLearners(),
+      this.masterDataSyncService.getReferenceLearners({
+        forceRefresh: options.forceRefresh,
+      }),
       options.includePromotions
-        ? this.masterDataSyncService.getPromotions()
+        ? this.masterDataSyncService.getPromotions({
+            forceRefresh: options.forceRefresh,
+          })
         : Promise.resolve([] as InOdcPromotion[]),
       options.includeReferentiels
-        ? this.masterDataSyncService.getReferentials()
+        ? this.masterDataSyncService.getReferentials({
+            forceRefresh: options.forceRefresh,
+          })
         : Promise.resolve([] as InOdcReferential[]),
     ]);
     const learners = options.promotionId
@@ -1006,7 +1015,10 @@ export class StatistiquesService {
     };
   }
 
-  private async isHistoricalPromotionSelection(promotionId?: string) {
+  private async isHistoricalPromotionSelection(
+    promotionId?: string,
+    options?: { forceRefresh?: boolean },
+  ) {
     if (!promotionId) {
       return false;
     }
@@ -1016,7 +1028,9 @@ export class StatistiquesService {
         where: { id: promotionId },
         select: { id: true },
       }),
-      this.masterDataSyncService.getPromotions(),
+      this.masterDataSyncService.getPromotions({
+        forceRefresh: options?.forceRefresh,
+      }),
     ]);
 
     if (!localPromotion) {

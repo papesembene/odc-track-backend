@@ -32,38 +32,42 @@ export class InOdcClientService {
 
   constructor(private readonly configService: ConfigService) {}
 
-  async getPromotions(): Promise<InOdcPromotion[]> {
+  async getPromotions(options?: { forceRefresh?: boolean }): Promise<InOdcPromotion[]> {
     return this.getCachedJson<InOdcPromotion[]>(
       '/promotions',
       {},
       {},
       300_000,
       1_800_000,
+      options?.forceRefresh,
     );
   }
 
-  async getActivePromotion(): Promise<InOdcPromotion> {
+  async getActivePromotion(options?: { forceRefresh?: boolean }): Promise<InOdcPromotion> {
     return this.getCachedJson<InOdcPromotion>(
       '/promotions/active/reference',
       {},
       {},
       300_000,
       1_800_000,
+      options?.forceRefresh,
     );
   }
 
-  async getReferentials(): Promise<InOdcReferential[]> {
+  async getReferentials(options?: { forceRefresh?: boolean }): Promise<InOdcReferential[]> {
     return this.getCachedJson<InOdcReferential[]>(
       '/referentials/all',
       {},
       {},
       300_000,
       1_800_000,
+      options?.forceRefresh,
     );
   }
 
   async getReferenceLearners(
     query: InOdcReferenceLearnersQuery = {},
+    options?: { forceRefresh?: boolean },
   ): Promise<InOdcReferenceLearnersResponse> {
     return this.getCachedJson<InOdcReferenceLearnersResponse>(
       '/learners/reference-list',
@@ -71,11 +75,13 @@ export class InOdcClientService {
       {},
       120_000,
       600_000,
+      options?.forceRefresh,
     );
   }
 
   async getAllReferenceLearners(
     query: Omit<InOdcReferenceLearnersQuery, 'page' | 'limit'> = {},
+    options?: { forceRefresh?: boolean },
   ): Promise<InOdcReferenceLearner[]> {
     const limit = 100;
     let page = 1;
@@ -87,7 +93,7 @@ export class InOdcClientService {
         ...query,
         page,
         limit,
-      });
+      }, options);
 
       items.push(...response.items);
       totalPages = response.pagination.totalPages;
@@ -139,9 +145,14 @@ export class InOdcClientService {
     );
   }
 
-  async getCoaches(): Promise<InOdcReferenceCoach[]> {
+  async getCoaches(options?: { forceRefresh?: boolean }): Promise<InOdcReferenceCoach[]> {
     const data = await this.getCachedJson<{ items: InOdcReferenceCoach[] }>(
       '/coaches/reference-list',
+      {},
+      {},
+      this.defaultCacheTtlMs,
+      this.defaultStaleTtlMs,
+      options?.forceRefresh,
     );
 
     return data.items;
@@ -153,16 +164,17 @@ export class InOdcClientService {
     extraHeaders: Record<string, string> = {},
     ttlMs = this.defaultCacheTtlMs,
     staleTtlMs = this.defaultStaleTtlMs,
+    forceRefresh = false,
   ): Promise<T> {
     const cacheKey = this.buildCacheKey(path, query, extraHeaders);
     const cached = this.cache.get(cacheKey);
     const now = Date.now();
 
-    if (cached && cached.expiresAt > now) {
+    if (!forceRefresh && cached && cached.expiresAt > now) {
       return cached.data as T;
     }
 
-    const inflight = this.inflightRequests.get(cacheKey);
+    const inflight = forceRefresh ? undefined : this.inflightRequests.get(cacheKey);
     if (inflight) {
       return inflight as Promise<T>;
     }
@@ -199,7 +211,9 @@ export class InOdcClientService {
         this.inflightRequests.delete(cacheKey);
       });
 
-    this.inflightRequests.set(cacheKey, request);
+    if (!forceRefresh) {
+      this.inflightRequests.set(cacheKey, request);
+    }
 
     return request;
   }

@@ -49,4 +49,9 @@ export class PromotionsQueryDto {
   @Transform(({ value }) => value === true || value === 'true')
   @IsBoolean()
   includeMetrics?: boolean;
+
+  @IsOptional()
+  @Transform(({ value }) => value === true || value === 'true' || value === '1')
+  @IsBoolean()
+  forceRefresh?: boolean;
 }
