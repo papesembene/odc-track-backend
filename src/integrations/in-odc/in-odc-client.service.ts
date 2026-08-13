@@ -29,6 +29,9 @@ export class InOdcClientService {
   private readonly inflightRequests = new Map<string, Promise<unknown>>();
   private readonly defaultCacheTtlMs = 120_000;
   private readonly defaultStaleTtlMs = 900_000;
+  private integrationAccessToken: string | null = null;
+  private integrationAccessTokenExpiresAt = 0;
+  private integrationLoginRequest: Promise<string> | null = null;
 
   constructor(private readonly configService: ConfigService) {}
 
@@ -239,7 +242,7 @@ export class InOdcClientService {
     try {
       const response = await fetch(url, {
         method: 'GET',
-        headers: this.buildHeaders(extraHeaders),
+        headers: await this.buildHeaders(extraHeaders),
         signal: controller.signal,
       });
 
@@ -305,7 +308,7 @@ export class InOdcClientService {
       const response = await fetch(url, {
         method: 'POST',
         headers: {
-          ...this.buildHeaders(),
+          ...this.buildBaseHeaders(),
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(body),
@@ -378,7 +381,7 @@ export class InOdcClientService {
       const response = await fetch(url, {
         method: 'PUT',
         headers: {
-          ...this.buildHeaders(extraHeaders),
+          ...(await this.buildHeaders(extraHeaders)),
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(body),
@@ -436,16 +439,93 @@ export class InOdcClientService {
     }
   }
 
-  private buildHeaders(
+  private async buildHeaders(
     extraHeaders: Record<string, string> = {},
-  ): Record<string, string> {
-    const token = this.configService.get<string>('IN_ODC_API_TOKEN')?.trim();
+  ): Promise<Record<string, string>> {
+    const hasAuthorizationHeader = Object.keys(extraHeaders).some(
+      (key) => key.toLowerCase() === 'authorization',
+    );
+    const token = hasAuthorizationHeader
+      ? null
+      : await this.getIntegrationAccessToken();
 
     return {
-      Accept: 'application/json',
+      ...this.buildBaseHeaders(),
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...extraHeaders,
     };
+  }
+
+  private buildBaseHeaders(): Record<string, string> {
+    return { Accept: 'application/json' };
+  }
+
+  private async getIntegrationAccessToken(): Promise<string | null> {
+    const staticToken = this.configService.get<string>('IN_ODC_API_TOKEN')?.trim();
+    const email = this.configService.get<string>('IN_ODC_API_EMAIL')?.trim();
+    const password = this.configService.get<string>('IN_ODC_API_PASSWORD')?.trim();
+
+    if (!email || !password) {
+      return staticToken || null;
+    }
+
+    if (
+      this.integrationAccessToken &&
+      this.integrationAccessTokenExpiresAt > Date.now()
+    ) {
+      return this.integrationAccessToken;
+    }
+
+    if (this.integrationLoginRequest) {
+      return this.integrationLoginRequest;
+    }
+
+    this.integrationLoginRequest = this.loginForIntegration(email, password)
+      .then((token) => {
+        this.integrationAccessToken = token;
+        this.integrationAccessTokenExpiresAt =
+          this.getJwtUsableUntil(token) ?? Date.now() + 50 * 60 * 1000;
+        return token;
+      })
+      .finally(() => {
+        this.integrationLoginRequest = null;
+      });
+
+    return this.integrationLoginRequest;
+  }
+
+  private async loginForIntegration(
+    email: string,
+    password: string,
+  ): Promise<string> {
+    const auth = await this.postJson<InOdcLoginResponse>('/auth/login', {
+      email,
+      password,
+    });
+
+    return auth.access_token;
+  }
+
+  private getJwtUsableUntil(token: string): number | null {
+    try {
+      const [, payload] = token.split('.');
+      if (!payload) {
+        return null;
+      }
+
+      const decoded = JSON.parse(
+        Buffer.from(payload, 'base64url').toString('utf8'),
+      ) as { exp?: number };
+
+      if (typeof decoded.exp !== 'number') {
+        return null;
+      }
+
+      // On renouvelle une minute avant l'expiration pour eviter les requetes limite.
+      return decoded.exp * 1000 - 60_000;
+    } catch {
+      return null;
+    }
   }
 
   private getBaseUrl(): string {
